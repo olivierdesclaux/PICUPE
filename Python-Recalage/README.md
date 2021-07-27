@@ -1,4 +1,4 @@
-# CalibragePython
+# Python Recalage
 
 Répertoire de stage à l'été 2021 sous la direction de Lama Séoud.
 Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.py, et d'appliquer le calibrage sur une autre image avec undistort.py.
@@ -9,23 +9,24 @@ Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.p
 1. Installer [miniconda](https://docs.conda.io/en/latest/miniconda.html).
 1. Installer [Azure Kinect SDK](https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/develop/docs/usage.md).
 1. Ajouter l'emplacement `C:\Program Files\Azure Kinect SDK v1.4.1\sdk\windows-desktop\amd64\release\bink4a.dll` à la variable Path ([exemple ici](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/))
-1. Si Visual Studio n'est pas déjà installé, installer [Microsoft Visual C++ 14.0] (https://visualstudio.microsoft.com/visual-cpp-build-tools) en choissisant l'option "C++ build tools" 
-![image de l'installation] (https://docs.microsoft.com/en-us/answers/storage/attachments/34873-10262.png)
+1. Si Visual Studio n'est pas déjà installé, installer [Microsoft Visual C++ 14.0](https://visualstudio.microsoft.com/visual-cpp-build-tools) en choissisant l'option "C++ build tools" 
+
+![image de l'installation](https://docs.microsoft.com/en-us/answers/storage/attachments/34873-10262.png "")
 
 ### Étapes sur ligne de commande
 1. Cloner le répertoire.
 1. Créer l'environnement avec la commande suivante (une fois) : 
-```
-conda env create -f environment.yml
-```
+    ```
+    conda env create -f environment.yml
+    ```
 1. Utiliser la commande suivante pour activer l'environnement à chaque fois :
-```
-conda activate stage2021 
-```
+    ```
+    conda activate stage2021 
+    ```
 1. Installer `pyk4a` séparément depuis la ligne de commande (en raison d'un bug dans pip):
-```
-pip install pyk4a --no-use-pep517 --global-option=build_ext --global-option="-IC:\Program Files\Azure Kinect SDK v1.4.1\sdk\include" --global-option="-LC:\Program Files\Azure Kinect SDK v1.4.1\sdk\windows-desktop\amd64\release\lib"
-```
+    ```
+    pip install pyk4a --no-use-pep517 --global-option=build_ext --global-option="-IC:\Program Files\Azure Kinect SDK v1.4.1\sdk\include" --global-option="-LC:\Program Files\Azure Kinect SDK v1.4.1\sdk\windows-desktop\amd64\release\lib"
+    ```
 
 
 ## Utilisation
