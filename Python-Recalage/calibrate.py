@@ -13,6 +13,11 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+cameraToOpen = "kinect"
+# Usage for selecting kinect, flir or both
+if len(sys.argv) > 1:
+    cameraToOpen = str(sys.argv[1])
+
 ## Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
@@ -71,16 +76,29 @@ maximumDistance = 5
 # Initial message to user
 print("Press q to exit program.")
 
-# Open camera
-kinect = k4a.PyK4A(k4a.Config(
-            color_format=k4a.ImageFormat.COLOR_BGRA32,
-            color_resolution=k4a.ColorResolution.RES_720P,
-            depth_mode=k4a.DepthMode.NFOV_UNBINNED,
-            camera_fps=k4a.FPS.FPS_30,
-            synchronized_images_only=True,
-         ))
-kinect.start()
-#kinect.whitebalance = 2800
+if (cameraToOpen == "flir" or "both"):
+    # Open FLIR directly with OpenCV
+    flirCapture = cv.VideoCapture(0)
+    if not flirCapture.isOpened():
+        sys.exit("Cannot open FLIR camera.")
+
+if (cameraToOpen == "kinect" or "both"):
+    # Open Kinect with pyK4a for more options
+    kinect = k4a.PyK4A(k4a.Config(
+                color_format=k4a.ImageFormat.COLOR_BGRA32,
+                color_resolution=k4a.ColorResolution.RES_720P,
+                depth_mode=k4a.DepthMode.NFOV_UNBINNED,
+                camera_fps=k4a.FPS.FPS_30,
+                synchronized_images_only=True,
+            ))
+    kinect.start()
+    #kinect.whitebalance = 2800
+    
+    # Test capture to check if kinect is open
+    capture = kinect.get_capture()
+    if not np.any(capture):
+        kinect.stop()
+        sys.exit("Cannot open Azure Kinect.")
 
 calibrationCompleted = False
 while not calibrationCompleted:
@@ -92,7 +110,7 @@ while not calibrationCompleted:
             cv.destroyAllWindows()
             sys.exit("Camera disconnnected, not enough frames taken for calibration.")
         # obtains rgb and depth frames
-        rgbFrame = capture#.color
+        rgbFrame = capture.color
 
         # Makes frame gray
         rgbGrayFrame = cv.cvtColor(rgbFrame, cv.COLOR_BGR2GRAY)
