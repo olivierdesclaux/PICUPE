@@ -13,12 +13,27 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-cameraToOpen = "kinect"
-# Usage for selecting kinect, flir or both
-if len(sys.argv) > 1:
-    cameraToOpen = str(sys.argv[1])
+# Convenience function for killing open objects
+def stop(message):
+    cv.destroyAllWindows()
+    if 'k' in camerasToOpen:
+        kinect.stop()
+    if 'f' in camerasToOpen:
+        if flir is not None:
+            flir.release()
+    sys.exit(str(message))
 
-## Corner finder variables
+# Default camera to open
+camerasToOpen = ""
+# Allows selection of cameras via command-line arguments
+if len(sys.argv) > 1:
+    cameraName = str(sys.argv[1])
+    if cameraName in ["k", "f", "kf"]:
+        camerasToOpen = cameraName
+    else:
+        stop("No camera with that code. Pleas use 'k', 'f' or 'kf'.")
+
+# Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
 totalCircles = numberOfRows*numberOfColumns
@@ -76,13 +91,25 @@ maximumDistance = 5
 # Initial message to user
 print("Press q to exit program.")
 
-if (cameraToOpen == "flir" or "both"):
-    # Open FLIR directly with OpenCV
-    flirCapture = cv.VideoCapture(0)
-    if not flirCapture.isOpened():
-        sys.exit("Cannot open FLIR camera.")
+# Open FLIR directly with OpenCV
+if "f" in camerasToOpen:
+    # Loops through all cameras connected via USB
+    cameraIndex = 1
+    while True:
+        cap = cv.VideoCapture(cameraIndex)
+        # If we reach the end of available cameras
+        if not cap.isOpened():
+            sys.exit("Cannot open FLIR camera")
+        # Uses unique frame height to identify FLIR T1020
+        if int(cap.get(cv.CAP_PROP_FRAME_HEIGHT)) == 768:
+            cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
+            flir = cap
+            break
+        else:
+            cap.release()
+            cameraIndex += 1
 
-if (cameraToOpen == "kinect" or "both"):
+if "k" in camerasToOpen:
     # Open Kinect with pyK4a for more options
     kinect = k4a.PyK4A(k4a.Config(
                 color_format=k4a.ImageFormat.COLOR_BGRA32,
@@ -97,63 +124,63 @@ if (cameraToOpen == "kinect" or "both"):
     # Test capture to check if kinect is open
     capture = kinect.get_capture()
     if not np.any(capture):
-        kinect.stop()
-        sys.exit("Cannot open Azure Kinect.")
+        stop("Cannot open Azure Kinect.")
 
 calibrationCompleted = False
 while not calibrationCompleted:
     while len(imagePositions) < maximumCalibrationImages:
-        # Capture frame-by-frame
-        capture = kinect.get_capture()
-        if not np.any(capture):
-            kinect.stop()
-            cv.destroyAllWindows()
-            sys.exit("Camera disconnnected, not enough frames taken for calibration.")
-        # obtains rgb and depth frames
-        rgbFrame = capture.color
+        # Get next frame from Kinect 
+        if "k" in camerasToOpen:
+            kinectCapture = kinect.get_capture()
+            kinectCapture = kinectCapture.color
+            if not np.any(capture):
+                stop("Kinect disconnnected, not enough frames taken for calibration.")
 
-        # Makes frame gray
-        rgbGrayFrame = cv.cvtColor(rgbFrame, cv.COLOR_BGR2GRAY)
-        
-        grayFrame = rgbGrayFrame
-        frame = rgbFrame
+        if "f" in camerasToOpen:
+            flirOpen, flirCapture = flir.read()
+            if not flirOpen:
+                stop("FLIR disconnnected, not enough frames taken for calibration.")
 
-        # Waits secondsToSkip between checkerboards
-        if (time.time() - lastCheckerboardTime > secondsToSkip):
-            # Detects blobs and draws them on the frame
-            keypoints = blobDetector.detect(grayFrame)
-            frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+        # TEMPORARY to observe IR image
+        frame = flirCapture
+        if frame is not None:
+            # Makes frame gray
+            grayFrame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
-            # Tries to find chessboard corners
-            boardIsFound, imageCorners = cv.findCirclesGrid(grayFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=blobDetector)
+            # Waits secondsToSkip between checkerboards
+            if (time.time() - lastCheckerboardTime > secondsToSkip):
+                # Detects blobs and draws them on the frame
+                keypoints = blobDetector.detect(grayFrame)
+                frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-            if boardIsFound == True:
-                # Add them to permanent lists
-                objectPositions.append(objectCorners)
-                imagePositions.append(imageCorners)
+                # Tries to find chessboard corners
+                boardIsFound, imageCorners = cv.findCirclesGrid(grayFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=blobDetector)
 
-                # Resets time counter
-                lastCheckerboardTime = time.time()
+                if boardIsFound == True:
+                    # Add them to permanent lists
+                    objectPositions.append(objectCorners)
+                    imagePositions.append(imageCorners)
 
-        # Draws previously used checkerboards
-        for index, pos in enumerate(imagePositions):
-            points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
-            if index == len(imagePositions) -1:
-                poylgonColor = (240, 20, 20)
-            else:
-                poylgonColor = (20, 220, 90)
-            cv.polylines(frame, [points], True, poylgonColor, 2)
+                    # Resets time counter
+                    lastCheckerboardTime = time.time()
 
-        # Indicates how many images remain
-        textColor = (80, 250, 55)
-        cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
-        
-        cv.imshow('frame', frame)
-        ## Waits 25 ms for next frame or quits main loop if 'q' is pressed
-        if cv.waitKey(25) == ord('q'):
-            kinect.stop()
-            cv.destroyAllWindows()
-            sys.exit("User exited program.")
+            # Draws previously used checkerboards
+            for index, pos in enumerate(imagePositions):
+                points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
+                if index == len(imagePositions) -1:
+                    poylgonColor = (240, 20, 20)
+                else:
+                    poylgonColor = (20, 220, 90)
+                cv.polylines(frame, [points], True, poylgonColor, 2)
+
+            # Indicates how many images remain
+            textColor = (80, 250, 55)
+            cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+            
+            cv.imshow('frame', frame)
+            ## Waits 25 ms for next frame or quits main loop if 'q' is pressed
+            if cv.waitKey(25) == ord('q'):
+                stop("User exited program.")
 
     calibrationCalculated = False
     while not calibrationCalculated:
@@ -223,6 +250,4 @@ colorBar.ax.set_ylabel('Absolute error')
 plt.axis('scaled')
 plt.show()
 
-# Release the camera and window
-kinect.stop()
-cv.destroyAllWindows()
+stop("Calibration successful.")

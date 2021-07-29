@@ -1,9 +1,10 @@
 
-name: stage2021
+name: recalage
 dependencies:
+  - python=3.7
   - pip
   - ffmpeg
-  - python=3.7
+  - typing_extensions
   - pip:
     - numpy
     - matplotlib
