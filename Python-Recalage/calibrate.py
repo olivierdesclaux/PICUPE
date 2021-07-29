@@ -5,6 +5,7 @@ import time
 import json
 import matplotlib.pyplot as plt
 import pyk4a as k4a
+import videohelper
 
 ## Encoder for Numpy arrays to JSON
 class NumpyEncoder(json.JSONEncoder):
@@ -16,11 +17,19 @@ class NumpyEncoder(json.JSONEncoder):
 # Convenience function for killing open objects
 def stop(message):
     cv.destroyAllWindows()
-    if 'k' in camerasToOpen:
+    try:
+        fps.stop()
+    except:
+        pass
+    try:
         kinect.stop()
-    if 'f' in camerasToOpen:
-        if flir is not None:
-            flir.release()
+    except: 
+        pass
+    try:
+        flir.release()
+        flirStream.stop()
+    except:
+        pass
     sys.exit(str(message))
 
 # Default camera to open
@@ -31,21 +40,23 @@ if len(sys.argv) > 1:
     if cameraName in ["k", "f", "kf"]:
         camerasToOpen = cameraName
     else:
-        stop("No camera with that code. Pleas use 'k', 'f' or 'kf'.")
+        stop("No camera with that code. Please use 'k', 'f' or 'kf'.")
 
+if camerasToOpen == "":
+    stop("No camera to open.")
 # Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
 totalCircles = numberOfRows*numberOfColumns
 checkerboardSize = (numberOfRows, numberOfColumns)
 distanceBetweenRows = 30 # In mm
-# Termination criteria for subpixel finding : 1st parameter is flag, 2nd is maximum iterations, 3rd is maximum epsilon
-criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
 # Array of float32 points
 # Last axis (z) is always 0
 # Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
 # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1
 objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0] for x in range(totalCircles)], np.float32)
+
 # Blob detector
 blobParams = cv.SimpleBlobDetector_Params()
 blobParams.minDistBetweenBlobs = 4
@@ -94,20 +105,22 @@ print("Press q to exit program.")
 # Open FLIR directly with OpenCV
 if "f" in camerasToOpen:
     # Loops through all cameras connected via USB
-    cameraIndex = 1
+    cameraIndex = 0
     while True:
         cap = cv.VideoCapture(cameraIndex)
         # If we reach the end of available cameras
         if not cap.isOpened():
             sys.exit("Cannot open FLIR camera")
-        # Uses unique frame height to identify FLIR T1020
-        if int(cap.get(cv.CAP_PROP_FRAME_HEIGHT)) == 768:
-            cap.set(cv.CAP_PROP_BUFFERSIZE, 3)
-            flir = cap
-            break
         else:
-            cap.release()
-            cameraIndex += 1
+            # Uses unique frame height to identify FLIR T1020
+            if int(cap.get(cv.CAP_PROP_FRAME_HEIGHT)) == 480:#768:
+                flir = cap
+                flirStream = videohelper.VideoStream(flir)
+                break
+            # Otherwise, releases capture and moves on to next camera
+            else:
+                cap.release()
+                cameraIndex += 1
 
 if "k" in camerasToOpen:
     # Open Kinect with pyK4a for more options
@@ -126,8 +139,13 @@ if "k" in camerasToOpen:
     if not np.any(capture):
         stop("Cannot open Azure Kinect.")
 
+# Creates FPS counter for debugging
+fps = videohelper.FPS()
+
+# Main capture and calibrate loop
 calibrationCompleted = False
 while not calibrationCompleted:
+    # This section finds grids in images and informs the user of the remaining grids to find
     while len(imagePositions) < maximumCalibrationImages:
         # Get next frame from Kinect 
         if "k" in camerasToOpen:
@@ -137,24 +155,27 @@ while not calibrationCompleted:
                 stop("Kinect disconnnected, not enough frames taken for calibration.")
 
         if "f" in camerasToOpen:
-            flirOpen, flirCapture = flir.read()
-            if not flirOpen:
+            if flirStream.stopped:
                 stop("FLIR disconnnected, not enough frames taken for calibration.")
+            else:
+                flirCapture = flirStream.read()               
 
-        # TEMPORARY to observe IR image
-        frame = flirCapture
-        if frame is not None:
+        if "f" in camerasToOpen:
+            # TEMPORARY to observe IR image
+            frame = flirCapture
+
             # Makes frame gray
             grayFrame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            redFrame = cv.subtract(frame[:,:,2], frame[:,:,1])
 
             # Waits secondsToSkip between checkerboards
             if (time.time() - lastCheckerboardTime > secondsToSkip):
-                # Detects blobs and draws them on the frame
-                keypoints = blobDetector.detect(grayFrame)
+                # Detects blobs and draws them on the frame, DISABLE TO IMPROVE FRAMERATE
+                keypoints = blobDetector.detect(redFrame)
                 frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
                 # Tries to find chessboard corners
-                boardIsFound, imageCorners = cv.findCirclesGrid(grayFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=blobDetector)
+                boardIsFound, imageCorners = cv.findCirclesGrid(redFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=blobDetector)
 
                 if boardIsFound == True:
                     # Add them to permanent lists
@@ -175,13 +196,17 @@ while not calibrationCompleted:
 
             # Indicates how many images remain
             textColor = (80, 250, 55)
-            cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+            #cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+            cv.putText(frame, str(fps.fps), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
             
             cv.imshow('frame', frame)
-            ## Waits 25 ms for next frame or quits main loop if 'q' is pressed
-            if cv.waitKey(25) == ord('q'):
-                stop("User exited program.")
+            fps.frames += 1
 
+        ## Waits for next frame or quits main loop if 'q' is pressed
+        if cv.waitKey(1) == ord('q'):
+            stop("User exited program.")
+
+    # This section calculates the calibration from all the points collected from all grids
     calibrationCalculated = False
     while not calibrationCalculated:
         # Calculates calibration matrices from positions
@@ -220,6 +245,7 @@ while not calibrationCompleted:
                     absError.append(error)
 
         # If all errors have been checked and no outliers found, calibration is complete
+        # Otherwise, it will return to the grid-finding loop to replace outlier grids
         calibrationCompleted = calibrationCalculated
 
 # Outputs calibration matrices to file
