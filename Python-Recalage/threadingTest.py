@@ -1,55 +1,29 @@
 import sys
-from threading import Thread
-import numpy as np
 import cv2 as cv
+import videohelper
 
-class VideoStream:
-    def __init__(self, cameraIndex):
-        # initialize the file video stream
-        self.stream = cv.VideoCapture(cameraIndex)
-        self.stream.set(cv.CAP_PROP_BUFFERSIZE, 200)
-        (self.grabbed, self.frame) = self.stream.read()
-        # used to indicate if the thread should be stopped or not
-        self.stopped = False
-
-    def start(self):
-        # start a thread to read frames from the file video stream
-        Thread(target=self.update, args=()).start()
-        return self
-
-    def update(self):
-        # keep looping infinitely
-        while True:
-            # if the thread indicator variable is set, stop the thread
-            if self.stopped:
-                return
-            else:
-                (self.grabbed, self.frame) = self.stream.read()
-
-    def read(self):
-        # return next frame in the queue
-        return self.frame
-
-    def stop(self):
-        # Stops thread
-        self.stopped = True
-
-flirStream = VideoStream(1).start()
-frameCounter = 0
+flir = cv.VideoCapture(0)
+flirStream = videohelper.VideoStream(flir)
+fps = videohelper.FPS()
 
 while True:
     if not flirStream.stopped:
-        flirCapture = flirStream.read()
-        cv.putText(flirCapture, str(frameCounter), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (120, 190, 50), 2)
-        cv.imshow('frame', flirCapture)
-        print(frameCounter)
-        frameCounter += 1
-        ## Waits 25 ms for next frame or quits main loop if 'q' is pressed
-        if cv.waitKey(20) == ord('q'):
+        frame = flirStream.read()
+
+        cv.putText(frame, str(fps.fps), (20, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (30, 30, 250), 2)
+        redFrame = cv.subtract(frame[:,:,2], frame[:,:,0])
+
+        cv.imshow('frame', frame)
+        fps.frames += 1
+
+        ## Waits 20 ms for next frame or quits main loop if 'q' is pressed
+        if cv.waitKey(1) == ord('q'):
             flirStream.stop()
             cv.destroyAllWindows()
+            fps.stop()
             sys.exit("User exited program.")
     else:
+        fps.stop()
         cv.destroyAllWindows()
         sys.exit("Camera disconnected")
 
