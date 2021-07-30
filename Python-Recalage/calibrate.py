@@ -4,8 +4,9 @@ import cv2 as cv
 import time
 import json
 import matplotlib.pyplot as plt
-import pyk4a as k4a
+# Local imports
 import videohelper
+from blobdetector import CircleDetector
 
 ## Encoder for Numpy arrays to JSON
 class NumpyEncoder(json.JSONEncoder):
@@ -22,71 +23,48 @@ def stop(message):
     except:
         pass
     try:
-        kinect.stop()
+        kinectStream.stop()
     except: 
         pass
     try:
-        flir.release()
         flirStream.stop()
     except:
         pass
     sys.exit(str(message))
 
-# Default camera to open
-camerasToOpen = ""
+kinectOn = True
+flirOn = True
 # Allows selection of cameras via command-line arguments
 if len(sys.argv) > 1:
     cameraName = str(sys.argv[1])
-    if cameraName in ["k", "f", "kf"]:
-        camerasToOpen = cameraName
+    if cameraName is "k":
+        kinectOn = True
+        flirOn = False
+    elif cameraName is "f":
+        flirOn = True
+        kinectOn = False
+    elif cameraName is "kf":
+        flirOn = kinectOn = True
     else:
         stop("No camera with that code. Please use 'k', 'f' or 'kf'.")
 
-if camerasToOpen == "":
-    stop("No camera to open.")
 # Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
 totalCircles = numberOfRows*numberOfColumns
 checkerboardSize = (numberOfRows, numberOfColumns)
-distanceBetweenRows = 30 # In mm
 
 # Array of float32 points
 # Last axis (z) is always 0
 # Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
 # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1
 objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0] for x in range(totalCircles)], np.float32)
-
-# Blob detector
-blobParams = cv.SimpleBlobDetector_Params()
-blobParams.minDistBetweenBlobs = 4
-# Thresholds used to simplify image for detector
-blobParams.minThreshold = 30
-blobParams.maxThreshold = 240 
-
-# Filter by area
-blobParams.filterByArea = True
-blobParams.minArea = 25 # In pixels (circle diameter 5 px)
-blobParams.maxArea = 10000 # In pixels
-
-# Filter by circularity
-blobParams.filterByCircularity = True
-blobParams.minCircularity = 0.1 # Weak circularity filtering for perspective (circles become ellipses)
-
-# Filter by convexity
-blobParams.filterByConvexity = True
-blobParams.minConvexity = 0.94 # Strong convexity filtering for circles
-
-# Filter by inertia
-blobParams.filterByInertia = True
-blobParams.minInertiaRatio = 0.01 # Weak elongation filtering for perspective (circles become ellipses)
-
-# Create a detector with the parameters
-blobDetector = cv.SimpleBlobDetector_create(blobParams)
-
 # Arrays to store object points and image points from all the images.
 objectPositions = [] # 3d point in real world space
 imagePositions = [] # 2d points in image plane.
+# Initialize blob detectors with circle parameters for kinect and FLIR
+kCircleDetector = CircleDetector(60, 240)
+fCircleDetector = CircleDetector(30, 240)
 # Skips X seconds between each checkerboard to increase variability of calibration images
 secondsToSkip = 2
 lastCheckerboardTime = time.time()
@@ -102,42 +80,34 @@ maximumDistance = 5
 # Initial message to user
 print("Press q to exit program.")
 
-# Open FLIR directly with OpenCV
-if "f" in camerasToOpen:
-    # Loops through all cameras connected via USB
-    cameraIndex = 0
-    while True:
-        cap = cv.VideoCapture(cameraIndex)
-        # If we reach the end of available cameras
-        if not cap.isOpened():
-            sys.exit("Cannot open FLIR camera")
+# Loops through all cameras connected via USB
+flir, kinect = None, None
+cameraIndex = 1 # Should be 0, changed to 1 because on laptops 0 is always webcam
+while True:
+    cap = cv.VideoCapture(cameraIndex)
+    # If we reach the end of available cameras
+    if not cap.isOpened():
+        break
+    else:
+        frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
+        if frameHeight == 768:
+            print("Found FLIR")
+            flir = cap
+            flirStream = videohelper.VideoStream(flir)
+            break
+        elif frameHeight == 720:
+            print("Found Kinect")
+            kinect = cap
+            kinectStream = videohelper.VideoStream(kinect)
+            break
+        # Otherwise, releases capture and moves on to next camera
         else:
-            # Uses unique frame height to identify FLIR T1020
-            if int(cap.get(cv.CAP_PROP_FRAME_HEIGHT)) == 480:#768:
-                flir = cap
-                flirStream = videohelper.VideoStream(flir)
-                break
-            # Otherwise, releases capture and moves on to next camera
-            else:
-                cap.release()
-                cameraIndex += 1
+            cap.release()
+            cameraIndex += 1
 
-if "k" in camerasToOpen:
-    # Open Kinect with pyK4a for more options
-    kinect = k4a.PyK4A(k4a.Config(
-                color_format=k4a.ImageFormat.COLOR_BGRA32,
-                color_resolution=k4a.ColorResolution.RES_720P,
-                depth_mode=k4a.DepthMode.NFOV_UNBINNED,
-                camera_fps=k4a.FPS.FPS_30,
-                synchronized_images_only=True,
-            ))
-    kinect.start()
-    #kinect.whitebalance = 2800
-    
-    # Test capture to check if kinect is open
-    capture = kinect.get_capture()
-    if not np.any(capture):
-        stop("Cannot open Azure Kinect.")
+if (flirOn and flir is None) or (kinectOn and kinect is None):
+    stop("Could not open requested cameras.")
 
 # Creates FPS counter for debugging
 fps = videohelper.FPS()
@@ -148,34 +118,34 @@ while not calibrationCompleted:
     # This section finds grids in images and informs the user of the remaining grids to find
     while len(imagePositions) < maximumCalibrationImages:
         # Get next frame from Kinect 
-        if "k" in camerasToOpen:
-            kinectCapture = kinect.get_capture()
-            kinectCapture = kinectCapture.color
-            if not np.any(capture):
+        if kinectOn:
+            if kinectStream.stopped:
                 stop("Kinect disconnnected, not enough frames taken for calibration.")
-
-        if "f" in camerasToOpen:
+            else:
+                kinectCapture = kinectStream.read()
+                
+        if flirOn:
             if flirStream.stopped:
                 stop("FLIR disconnnected, not enough frames taken for calibration.")
             else:
                 flirCapture = flirStream.read()               
 
-        if "f" in camerasToOpen:
+        if kinectOn:
             # TEMPORARY to observe IR image
-            frame = flirCapture
+            frame = kinectCapture
 
             # Makes frame gray
-            grayFrame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            redFrame = cv.subtract(frame[:,:,2], frame[:,:,1])
+            #grayFrame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            redFrame = cv.subtract(frame[:,:,2], frame[:,:,0])
 
             # Waits secondsToSkip between checkerboards
             if (time.time() - lastCheckerboardTime > secondsToSkip):
                 # Detects blobs and draws them on the frame, DISABLE TO IMPROVE FRAMERATE
-                keypoints = blobDetector.detect(redFrame)
+                keypoints = kCircleDetector.get().detect(redFrame)
                 frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
                 # Tries to find chessboard corners
-                boardIsFound, imageCorners = cv.findCirclesGrid(redFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=blobDetector)
+                boardIsFound, imageCorners = cv.findCirclesGrid(redFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
 
                 if boardIsFound == True:
                     # Add them to permanent lists
@@ -196,8 +166,7 @@ while not calibrationCompleted:
 
             # Indicates how many images remain
             textColor = (80, 250, 55)
-            #cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
-            cv.putText(frame, str(fps.fps), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+            cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
             
             cv.imshow('frame', frame)
             fps.frames += 1
