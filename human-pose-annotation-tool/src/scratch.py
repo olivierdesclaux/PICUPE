@@ -15,12 +15,18 @@ JOINTS = ['SpineBase', 'SpineMid', 'Neck', 'Head',
           'SpineShoulder', 'HandTipLeft', 'ThumbLeft', 'HandTipRight',
           'ThumbRight']
 
+# Markers = ['pelvis', 'torso',
+#            'humerus_r', 'radius_r',
+#            'femur_r', 'tibia_r', 'patella_r', 'talus_r', 'toes_r',
+#            'femur_l', 'tibia_l', 'patella_l', 'talus_l', 'toes_l',]
+
 DEFAULT_KPT = [[[258.5, 179.5], [258.5, 135.], [255.5, 87.5], [255.5, 71.5],
                 [282.5, 100.], [287., 131.5], [286., 161.5], [286., 167.],
                 [229., 101.], [227.5, 136.], [230., 168.], [231.5, 173.],
                 [278., 181.], [280.5, 231.], [280., 273.5], [282.5, 281.5],
                 [239., 182.], [242., 232.5], [244., 275.5], [240., 286.],
                 [255.5, 95.5], [322.56, 134.68], [326.76, 131.6], [324.24, 133.], [318.64, 128.8]]]
+
 
 # Color selection for visualization
 JOINTS_COLOR = [(255, 0, 0), (244, 41, 0), (234, 78, 0), (223, 112, 0),
@@ -45,6 +51,9 @@ class Noter():
         if (self.kpts_in is not None) and (os.path.isfile(self.kpts_in)):
             with open(self.kpts_in, 'r') as f:
                 self.json_dict = json.load(f)
+        else:
+            for i, joint in enumerate(JOINTS):
+                self.json_dict[joint] = DEFAULT_KPT[0][i]
 
         # Event variable, for click, modify and add events
         self.is_clicked = False
@@ -107,11 +116,13 @@ class Noter():
         name = "keypoints"
 
 
-        # Initialise keypoints
-        if self.kpts_in is not None:
-            kpts = np.array(self.json_dict[name])
-        else:
-            kpts = np.array(DEFAULT_KPT).copy()
+        # #Initialise keypoints
+        # if self.kpts_in is not None:
+        #     kpts = np.array(self.json_dict[name])
+        # else:
+        #     kpts2 = np.array(DEFAULT_KPT).copy()
+        # print(kpts2)
+        kpts = np.array([list(self.json_dict.values())])
 
         # Upscale image for better readability
         # This was in the initial code. Instead of changing everything, I just upscale (and downscale later on) with a scale factor of 1
@@ -140,8 +151,9 @@ class Noter():
                     y, x = k[0], k[1]
                     z = float(depth[int(y), int(x)])
                     kpts3D.append([x,y,z])
-                print(kpts3D.copy())
-                self.json_dict[name] = kpts3D.copy()#.tolist()
+
+                for i, marker in enumerate(JOINTS):
+                    self.json_dict[marker] = kpts3D[i]#.tolist()
 
                 cv2.destroyAllWindows()
                 with open(self.kpts_out, 'w') as f:
@@ -152,33 +164,39 @@ class Noter():
                 self.master.update()
                 break
 
-            elif key == ord('r'):
-                tmp = img.astype(np.uint8).copy()
-                kpts_backup = kpts.copy()
-                self.draw_kpts(tmp, kpts_backup, self.radius)
-                self.reset()
-                cv2.setMouseCallback(name, self.click_left, [name, tmp, kpts])
+            # elif key == ord('r'):
+            #     tmp = img.astype(np.uint8).copy()
+            #     kpts_backup = kpts.copy()
+            #     self.draw_kpts(tmp, kpts_backup, self.radius)
+            #     self.reset()
+            #     cv2.setMouseCallback(name, self.click_left, [name, tmp, kpts])
 
 
-            elif key == ord('c'):
-                with open(self.kpts_out, 'w') as f:
-                    json.dump(self.json_dict, f)
-                exit(1)
+            # elif key == ord('c'):
+            #     with open(self.kpts_out, 'w') as f:
+            #         json.dump(self.json_dict, f)
+            #     exit(1)
 
-            elif key == ord('p'):
-                self.error.set("Changing sequence.")
-                self.master.update()
-                next_name = name.split(self.slash)[-3]
-                self.reset()
-                break
+            # elif key == ord('p'):
+            #     self.error.set("Changing sequence.")
+            #     self.master.update()
+            #     next_name = name.split(self.slash)[-3]
+            #     self.reset()
+            #     break
 
-            elif key == ord('n'):
-                tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
-                np.copyto(kpts, kpts_backup)
-                self.draw_kpts(tmp, kpts, self.radius)
-                self.reset()
+            # elif key == ord('n'):
+            #     tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
+            #     np.copyto(kpts, kpts_backup)
+            #     self.draw_kpts(tmp, kpts, self.radius)
+            #     self.reset()
 
             if self.is_modifying is not True:
+                if key == ord('n'):
+                    tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
+                    np.copyto(kpts, kpts_backup)
+                    self.draw_kpts(tmp, kpts, self.radius)
+                    self.reset()
+
                 if key == 27 and self.is_clicked is True:
                     for obj in range(kpts.shape[0]):
                         for el in kpts[obj]:
@@ -319,7 +337,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, dest='data_dir', help='Data directory.', required=True)
     parser.add_argument('--kpts_in', default=None, help="Pre-saved keypoints")
-    parser.add_argument('--kpts_out', type=str, default='../annotations.json', dest='kpts_out', help='Output file path.')
+    parser.add_argument('--kpts_out', type=str, default='../annotations3D.json', dest='kpts_out', help='Output file path')
     parser.add_argument('--scale', type=float, default=1, dest='scale', help='Depth image scale.')
     parser.add_argument('--radius', type=int, default=6, dest='radius', help='Joint annotation radius.')
 
