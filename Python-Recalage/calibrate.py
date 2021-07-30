@@ -32,22 +32,6 @@ def stop(message):
         pass
     sys.exit(str(message))
 
-kinectOn = True
-flirOn = True
-# Allows selection of cameras via command-line arguments
-if len(sys.argv) > 1:
-    cameraName = str(sys.argv[1])
-    if cameraName is "k":
-        kinectOn = True
-        flirOn = False
-    elif cameraName is "f":
-        flirOn = True
-        kinectOn = False
-    elif cameraName is "kf":
-        flirOn = kinectOn = True
-    else:
-        stop("No camera with that code. Please use 'k', 'f' or 'kf'.")
-
 # Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
@@ -60,8 +44,10 @@ checkerboardSize = (numberOfRows, numberOfColumns)
 # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1
 objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0] for x in range(totalCircles)], np.float32)
 # Arrays to store object points and image points from all the images.
-objectPositions = [] # 3d point in real world space
-imagePositions = [] # 2d points in image plane.
+kObjectPositions = [] # 3d point in real world space
+kImagePositions = [] # 2d points in image plane.
+fObjectPositions = [] # 3d point in real world space, flir
+fImagePositions = [] # 2d points in image plane, flir
 # Initialize blob detectors with circle parameters for kinect and FLIR
 kCircleDetector = CircleDetector(60, 240)
 fCircleDetector = CircleDetector(30, 240)
@@ -84,98 +70,101 @@ print("Press q to exit program.")
 flir, kinect = None, None
 cameraIndex = 1 # Should be 0, changed to 1 because on laptops 0 is always webcam
 while True:
-    cap = cv.VideoCapture(cameraIndex)
+    # CAP_DSHOW is essential for FLIR framerate
+    cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
     # If we reach the end of available cameras
     if not cap.isOpened():
         break
     else:
+        cameraIndex += 1
         frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
         # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
         if frameHeight == 768:
             print("Found FLIR")
             flir = cap
             flirStream = videohelper.VideoStream(flir)
-            break
         elif frameHeight == 720:
             print("Found Kinect")
             kinect = cap
             kinectStream = videohelper.VideoStream(kinect)
-            break
         # Otherwise, releases capture and moves on to next camera
         else:
             cap.release()
-            cameraIndex += 1
+            
 
-if (flirOn and flir is None) or (kinectOn and kinect is None):
-    stop("Could not open requested cameras.")
+if flir is None or kinect is None:
+    stop("Could not open both cameras.")
 
-# Creates FPS counter for debugging
+# Creates FPS counter for debugging code speed issues
 fps = videohelper.FPS()
 
 # Main capture and calibrate loop
 calibrationCompleted = False
 while not calibrationCompleted:
     # This section finds grids in images and informs the user of the remaining grids to find
-    while len(imagePositions) < maximumCalibrationImages:
-        # Get next frame from Kinect 
-        if kinectOn:
-            if kinectStream.stopped:
-                stop("Kinect disconnnected, not enough frames taken for calibration.")
-            else:
-                kinectCapture = kinectStream.read()
-                
-        if flirOn:
-            if flirStream.stopped:
-                stop("FLIR disconnnected, not enough frames taken for calibration.")
-            else:
-                flirCapture = flirStream.read()               
+    while len(kImagePositions) < maximumCalibrationImages:
+        # Get next frame from both cameras
+        if kinectStream.stopped or flirStream.stopped:
+            stop("Camera disconnnected, not enough frames taken for calibration.")
+        else:
+            kinectFrame = kinectStream.read()
+            flirFrame = flirStream.read()
 
-        if kinectOn:
-            # TEMPORARY to observe IR image
-            frame = kinectCapture
+        # Grey Kinect uses red component - blue component, flir uses a simple grayscale
+        kinectGreyFrame = cv.subtract(kinectFrame[:,:,2], kinectFrame[:,:,0])
+        flirGreyFrame = cv.cvtColor(flirFrame, cv.COLOR_BGR2GRAY)
 
-            # Makes frame gray
-            #grayFrame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-            redFrame = cv.subtract(frame[:,:,2], frame[:,:,0])
+        # Waits secondsToSkip between checkerboards
+        if (time.time() - lastCheckerboardTime > secondsToSkip):
+            # Detects blobs and draws them on each frame, DISABLE TO IMPROVE FRAMERATE
+            keypoints = kCircleDetector.get().detect(kinectGreyFrame)
+            kinectFrame = cv.drawKeypoints(kinectFrame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-            # Waits secondsToSkip between checkerboards
-            if (time.time() - lastCheckerboardTime > secondsToSkip):
-                # Detects blobs and draws them on the frame, DISABLE TO IMPROVE FRAMERATE
-                keypoints = kCircleDetector.get().detect(redFrame)
-                frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+            keypoints = kCircleDetector.get().detect(flirGreyFrame)
+            flirFrame = cv.drawKeypoints(flirFrame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-                # Tries to find chessboard corners
-                boardIsFound, imageCorners = cv.findCirclesGrid(redFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
+            # Tries to find chessboard corners
+            kinectBoardFound, kImageCorners = cv.findCirclesGrid(kinectGreyFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
+            flirBoardFound, fImageCorners = cv.findCirclesGrid(flirGreyFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
 
-                if boardIsFound == True:
-                    # Add them to permanent lists
-                    objectPositions.append(objectCorners)
-                    imagePositions.append(imageCorners)
+            if kinectBoardFound and flirBoardFound:
+                # Add them to permanent lists
+                kObjectPositions.append(objectCorners)
+                kImagePositions.append(kImageCorners)
+                fObjectPositions.append(objectCorners)
+                fImagePositions.append(fImageCorners)
 
-                    # Resets time counter
-                    lastCheckerboardTime = time.time()
+                # Resets time counter
+                lastCheckerboardTime = time.time()
 
-            # Draws previously used checkerboards
-            for index, pos in enumerate(imagePositions):
-                points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
-                if index == len(imagePositions) -1:
-                    poylgonColor = (240, 20, 20)
-                else:
-                    poylgonColor = (20, 220, 90)
-                cv.polylines(frame, [points], True, poylgonColor, 2)
+        # Draws previously used checkerboards
+        poylgonColor = (20, 220, 90)
+        for index, pos in enumerate(kImagePositions):
+            points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
+            cv.polylines(kinectFrame, [points], True, poylgonColor, 2)
+        for index, pos in enumerate(fImagePositions):
+            points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
+            cv.polylines(flirFrame, [points], True, poylgonColor, 2)
 
-            # Indicates how many images remain
-            textColor = (80, 250, 55)
-            cv.putText(frame, 'Remaining images: ' + str(maximumCalibrationImages - len(imagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
-            
-            cv.imshow('frame', frame)
-            fps.frames += 1
+        # Indicates how many images remain
+        textColor = (80, 250, 55)
+        cv.putText(kinectFrame, 'Remaining images: ' + str(maximumCalibrationImages - len(kImagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+        cv.putText(flirFrame, 'FPS: ' + str(fps.fps), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+
+
+        fDim = (int(flirFrame.shape[1]/1.5), int(kinectFrame.shape[0]/1.5))
+        kDim = (int(kinectFrame.shape[1]/1.5), int(kinectFrame.shape[0]/1.5))
+        flirFrame = cv.resize(flirFrame, fDim)
+        kinectFrame = cv.resize(kinectFrame, kDim)
+        concatenatedFrames = cv.hconcat([kinectFrame, flirFrame])
+        cv.imshow('Calibration', concatenatedFrames)
+        fps.frames += 1
 
         ## Waits for next frame or quits main loop if 'q' is pressed
         if cv.waitKey(1) == ord('q'):
             stop("User exited program.")
 
-    # This section calculates the calibration from all the points collected from all grids
+    # This section calculates the calibration from the points collected from all grids
     calibrationCalculated = False
     while not calibrationCalculated:
         # Calculates calibration matrices from positions
