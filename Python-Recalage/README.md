@@ -31,14 +31,15 @@ Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.p
 
 ## Utilisation
 
-Si vous n'avez pas de checkerboard, imprimez-en un avec le fichier Resources/Checkerboard.pdf.
+La calibration fonctionne avec une grille de cercles peinte en rouge ou orange.
+Cette grille peut être obtenue en découpant au laser du bois avec le fichier Grille.svg.
 Pour calibrer une caméra, simplement activer l'environnement et effectuer :
 ```
 python calibrate.py
 ```
-Ensuite, déplacer le checkerboard afin de couvrir toute l'image de la caméra de quadrilatères verts.
+Ensuite, déplacer la grile afin de couvrir toute l'image de la caméra de quadrilatères verts.
 Lorsque le compte d'image à prendre atteint 0, le logiciel peut demander de prendre des captures à nouveau.
-Ceci signifie qu'il a rejeté des captures trop floues/imprécises, et il faut simplement en reprendre.
+Ceci signifie qu'il a rejeté des captures trop floues/imprécises, et il faut simplement en prendre davantage.
 Les recommendations suivantes sont à suivre pour un calibrage optimal : (tirés de [ce lien](https://stackoverflow.com/questions/12794876/how-to-verify-the-correctness-of-calibration-of-a-webcam/12821056#12821056)):
 1. Avoir un bon éclairage
 2. Bien fixer la caméra
