@@ -2,19 +2,13 @@ import sys
 import numpy as np
 import cv2 as cv
 import time
-import json
 import matplotlib.pyplot as plt
-# Local imports
+# Local modules
 import videohelper
 from blobdetector import CircleDetector
 from calibrationhandler import Calibration
+from npencoder import NumpyEncoder
 
-## Encoder for Numpy arrays to JSON
-class NumpyEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
 
 # Convenience function for killing open objects
 def stop(message):
@@ -29,6 +23,7 @@ def stop(message):
         pass
     sys.exit(str(message))
 
+## Initial global parameters for calibration
 # Corner finder variables
 numberOfRows = 12
 numberOfColumns = 12
@@ -44,19 +39,19 @@ objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0
 objectPositions = [] #3d points in real world space
 imagePositionsBoth = [[],[]] # 2d points in image plane, one for each camera
 # Initialize blob detectors with circle parameters for kinect and FLIR
-kCircleDetector = CircleDetector(60, 240)
-fCircleDetector = CircleDetector(30, 240)
+kCircleDetector = CircleDetector(threshold = (60, 240))
+#fCircleDetector = CircleDetector(threshold = (30, 240))
+fCircleDetector = CircleDetector(threshold = (50, 200), minArea = 15)
+
 # Skips X seconds between each checkerboard to increase variability of calibration images
 secondsToSkip = 2
 lastCheckerboardTime = time.time()
 # Maximum number of checkerboard images to obtain
-maximumCalibrationImages = 30
+maxCalibImages = 15
 # Minimum number of checkerboard images to calculate matrices after removing outliers
-minimumCalibrationImages = maximumCalibrationImages - 5
+minCalibImages = maxCalibImages - 5
 # Maximum error to tolerate on each point, in pixels
-maximumPointError = 10
-# Maximum distance within volume of calibration, in meters
-maximumDistance = 5
+maximumPointError = 4
 
 # Initial message to user
 print("Press q to exit program.")
@@ -90,17 +85,15 @@ while True:
         else:
             cap.release()
             
-
 if flir is None or kinect is None:
     stop("Could not open both cameras.")
-
 
 # Main capture and calibrate loop
 takeMoreImages = True
 while takeMoreImages:
-    # This section finds grids in images and informs the user of the remaining grids to find
-    # It loops until at least maximumCalibrationImages grids have been found
-    while len(objectPositions) < maximumCalibrationImages:
+    ## This section finds grids in images and informs the user of the remaining grids to find
+    # It loops until at least maxCalibImages grids have been found
+    while len(objectPositions) < maxCalibImages:
         # Get next frame from both cameras
         if kinectStream.stopped or flirStream.stopped:
             stop("Camera disconnnected, not enough frames taken for calibration.")
@@ -135,103 +128,101 @@ while takeMoreImages:
                 # Resets time counter
                 lastCheckerboardTime = time.time()
 
-        # Draws previously used checkerboards
-        poylgonColor = (20, 220, 90)
+        # Draws previously used checkerboards using OpenCV lines, in each camera view
         for cameraType, imagePositions in enumerate(imagePositionsBoth):
+            # Uses cameraType to deduce frame to draw to
             frame = kinectFrame if cameraType == 0 else flirFrame
             for pos in imagePositions:
+                # Uses corners of each calibration grid as points for lines
                 points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
-                cv.polylines(frame, [points], True, poylgonColor, 2)
+                cv.polylines(frame, [points], True, (20, 220, 90), 2)
 
         # Indicates how many images remain
         textColor = (80, 250, 55)
-        cv.putText(kinectFrame, 'Remaining images: ' + str(maximumCalibrationImages - len(objectPositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+        cv.putText(kinectFrame, 'Remaining images: ' + str(maxCalibImages - len(objectPositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
 
+        # Scales FLIR image to same height as Kinect for display side-by-side
         flirRatio =  flirFrame.shape[1] / flirFrame.shape[0]
-        scalingFactor = 1.5
+        scalingFactor = 1.5 # Reduces overall window size to fit on monitor
         kHeight, kWidth  = kinectFrame.shape[0:2]
         fDim = (int(kHeight*flirRatio/scalingFactor), int(kHeight/scalingFactor))
         kDim = (int(kWidth/scalingFactor), int(kHeight/scalingFactor))
         flirFrame = cv.resize(flirFrame, fDim)
         kinectFrame = cv.resize(kinectFrame, kDim)
+        # Side-by-side display, requires both frames have same height
         concatenatedFrames = cv.hconcat([kinectFrame, flirFrame])
         cv.imshow('Calibration', concatenatedFrames)
 
-        ## Waits for next frame or quits main loop if 'q' is pressed
+        # Waits for next frame or quits main loop if 'q' is pressed
         if cv.waitKey(1) == ord('q'):
             stop("User exited program.")
 
-    # This section calculates the calibration from the points collected from all grids
-    calibrationCalculated = False
-    while not calibrationCalculated:
-        # Calculates calibration matrices from positions
-        if len(objectPositions) < minimumCalibrationImages:
-            # Returns to image taking
-            break
-        else:
-            # Stores different kinds of errors
-            x, y, xError, yError, absError = [[],[]], [[],[]], [[],[]], [[],[]], [[],[]]
-            # Passes twice, once for FLIR, once for Kinect
-            for cameraType, imagePositions in enumerate(imagePositionsBoth):
-                # Selects image size depending on camera in use
-                imageSize = kinectFrame.shape[::-1] if cameraType == 0 else flirFrame.shape[::-1]
-                retroprojectionError, cameraMatrix, distortion, rotation, translation = cv.calibrateCamera(objectPositions, imagePositions, imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL+cv.CALIB_ZERO_TANGENT_DIST)
-                calibrationCalculated = True
+    ## This section calculates the calibration from the points collected from all grids
+    # Calculates size of kinect and flir frames (using last frame)
+    kSize = kinectGreyFrame.shape[::-1]
+    fSize = flirGreyFrame.shape[::-1]
+    # Creates two Calibration objects for handling calibration and error-checking
+    kinectCalibration = Calibration("Kinect", objectPositions, imagePositionsBoth[0], kSize, minCalibImages)
+    flirCalibration = Calibration("FLIR", objectPositions, imagePositionsBoth[1], fSize, minCalibImages)
 
-            # Iterates through each image to calculate x and y errors of all corners
-            for index, imagePositionOld in enumerate(imagePositions):
-                # Reprojects objects to positions in image
-                imagePositionNew, _ = cv.projectPoints(objectPositions[index], rotation[index], translation[index], cameraMatrix, distortion)
-                # Compares pure x and y errors by subtracting two lists
-                xError.append(imagePositionNew[:,:,0].ravel() - imagePositionOld[:,:,0].ravel())
-                yError.append(imagePositionNew[:,:,1].ravel() - imagePositionOld[:,:,1].ravel())
-                # Iterates through each point to calculate more complicated absError (cannot be done directly through list)
-                for (oldPoint, newPoint) in zip(imagePositionOld, imagePositionNew):
-                    x.append(oldPoint[0, 0])
-                    y.append(oldPoint[0, 1])
-                    # Calculates error using L2 norm (distances squared)
-                    error = cv.norm(oldPoint[0], newPoint[0], cv.NORM_L2)
-                    if error > maximumPointError:
-                        # If error is too large, eliminates the image in which the error is found
-                        imagePositions.pop(index)
-                        objectPositions.pop(index)
-                        # Asks to perform calibration calculation again
-                        calibrationCalculated = False
-                        print("Image removed.")
-                        break
-                    else:
-                        absError.append(error)
+    # Tries to calibrate Kinect first
+    if kinectCalibration.calibrate():
+        print("Kinect calibration success")
+        # Removes outlier images of the Kinect from the FLIR calibration as well
+        flirCalibration.pop(kinectCalibration.poppedIndex)
+        # Tries to calibrate FLIR next:
+        if flirCalibration.calibrate():
+            print("FLIR calbiration succcess")
+            # Removes outlier images of the FLIR from the Kinect calibration
+            # However, Kinect parameters are assumed to still be reasonable, so are not re-calibrated
+            kinectCalibration.pop(flirCalibration.poppedIndex)
+            # Displays error graphics for both calibration, for final manual inspection of results
+            kinectCalibration.displayError()
+            flirCalibration.displayError()
+            # Breaks out of image-taking loop
+            takeMoreImages = False
 
-        # If all errors have been checked and no outliers found, calibration is complete
-        # Otherwise, it will return to the grid-finding loop to replace outlier grids
-        takeMoreImages = not calibrationCalculated
+# END OF while takeMoreImages
 
-# Outputs calibration matrices to file
-with open('calibrationFile2.json', 'w') as file:
-    # Assigns labels to values to make JSON readable
-    dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : cameraMatrix, 'DistortionCoefficients' : distortion[0:7]}
-    # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
-    json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
+# Termination criteria : 1st parameter is flag, 2nd is maximum iterations, 3rd is maximum epsilon
+criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 50, 0.0001)
 
-# Command line error prints
-print("Retroprojection error :", retroprojectionError)
-print("X error absolute mean, variance:", np.mean(np.abs(xError)), ',', np.var(xError))
-print("Y error absolute mean, variance:", np.mean(np.abs(yError)), ',', np.var(yError))
+# Stereo calibration in OpenCV, using keypoints identified previously
+# This obtains the R and T matrices to transform between 2 camera positions, plus improved camera matrices and distortion coefficients
+# Uses previous calibration parameters as a starting point (CALIB_USE_INSTRINSIC_GUESS)
+stereoSuccess, kMatrix, kDist, fMatrix, fDist, R, T, E, F = cv.stereoCalibrate( 
+    objectPositions, imagePositionsBoth[0], imagePositionsBoth[1], 
+    kinectCalibration.cameraMatrix, kinectCalibration.distortion,
+    flirCalibration.cameraMatrix, flirCalibration.distortion,
+    kSize, flags=cv.CALIB_USE_INTRINSIC_GUESS, criteria=criteria)
+if stereoSuccess:
+    print("Stereo calibration successful")
+    # Alpha can be varied from 0 to 1 to get no black pixels or all pixels in undistorted image
+    # This obtains precise R and T matrices to transforms PIXELS between images
+    R1, R2, P1, P2, Q = cv.stereoRectify(kMatrix, kDist, fMatrix, fDist, kSize, R, T, alpha=1)
+    # Calculates maps for undistorting each image into a rectified state
+    kMapx, kMapy = cv.initUndistortRectifyMap(kMatrix, kDist, R1, P1, kSize, cv.CV_32FC1) #try CV_32FC2
+    fMapx, fMapy = cv.initUndistortRectifyMap(fMatrix, fDist, R1, P1, fSize, cv.CV_32FC1) #try CV_32FC2
 
-# Graph of relative errors
-plot1 = plt.figure(1)
-plt.scatter(xError, yError)
-plt.ylabel('Y error, pixels')
-plt.xlabel('X error, pixels')
-plt.title('X and Y error for all points in calibration')
+# Displayed undistorted image for debugging, should be in another file!
+while True:
+    kinectFrame = kinectStream.read()
+    flirFrame = flirStream.read()
+    # Maps pixels from FLIR to Kinect image
+    flirRemapped = cv.remap(flirFrame, fMapx, fMapy, cv.INTER_LINEAR)
 
-# Intensity chart of errors based on position in image
-fig, ax = plt.subplots()
-contourPlot = ax.tricontourf(x, y, absError, 100, cmap='magma', extend='both', antialiased=False)
-ax.set_title('Absolute error based on position in image')
-colorBar = fig.colorbar(contourPlot)
-colorBar.ax.set_ylabel('Absolute error')
-plt.axis('scaled')
-plt.show()
+    # Scales FLIR image to same height as Kinect for display side-by-side
+    flirRatio =  flirRemapped.shape[1] / flirRemapped.shape[0]
+    scalingFactor = 1.5 # Reduces overall window size to fit on monitor
+    kHeight, kWidth  = kinectFrame.shape[0:2]
+    fDim = (int(kHeight*flirRatio/scalingFactor), int(kHeight/scalingFactor))
+    kDim = (int(kWidth/scalingFactor), int(kHeight/scalingFactor))
+    flirRemapped = cv.resize(flirRemapped, fDim)
+    kinectFrame = cv.resize(kinectFrame, kDim)
+    # Side-by-side display, requires both frames have same height
+    concatenatedFrames = cv.hconcat([kinectFrame, flirRemapped])
+    cv.imshow('Undistorted', concatenatedFrames)
 
-stop("Calibration successful.")
+    # Waits for next frame or quits main loop if 'q' is pressed
+    if cv.waitKey(1) == ord('q'):
+        stop("User exited program.")

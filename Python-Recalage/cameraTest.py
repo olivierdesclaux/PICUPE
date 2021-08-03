@@ -9,7 +9,8 @@ fps = videohelper.FPS()
 while True:
     if not stream.stopped:
         frame = stream.read()
-        
+        #frame = cv.subtract(frame[:,:,2], frame[:,:,0])
+
         cv.putText(frame, str(fps.fps), (20, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (20, 20, 250), 2)
 
         cv.imshow('frame', frame)
