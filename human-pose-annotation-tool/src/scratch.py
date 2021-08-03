@@ -27,7 +27,6 @@ DEFAULT_KPT = [[[258.5, 179.5], [258.5, 135.], [255.5, 87.5], [255.5, 71.5],
                 [239., 182.], [242., 232.5], [244., 275.5], [240., 286.],
                 [255.5, 95.5], [322.56, 134.68], [326.76, 131.6], [324.24, 133.], [318.64, 128.8]]]
 
-
 # Color selection for visualization
 JOINTS_COLOR = [(255, 0, 0), (244, 41, 0), (234, 78, 0), (223, 112, 0),
                 (213, 142, 0), (202, 168, 0), (192, 191, 0), (151, 181, 0),
@@ -115,7 +114,6 @@ class Noter():
         depth = cv2.imread(os.path.join(data_dir, "depth_image.png"), cv2.IMREAD_GRAYSCALE)
         name = "keypoints"
 
-
         # #Initialise keypoints
         # if self.kpts_in is not None:
         #     kpts = np.array(self.json_dict[name])
@@ -150,10 +148,10 @@ class Noter():
                 for k in d_k[0]:
                     y, x = k[0], k[1]
                     z = float(depth[int(y), int(x)])
-                    kpts3D.append([x,y,z])
+                    kpts3D.append([x, y, z])
 
                 for i, marker in enumerate(JOINTS):
-                    self.json_dict[marker] = kpts3D[i]#.tolist()
+                    self.json_dict[marker] = kpts3D[i]  # .tolist()
 
                 cv2.destroyAllWindows()
                 with open(self.kpts_out, 'w') as f:
@@ -165,12 +163,11 @@ class Noter():
                 break
 
             # elif key == ord('r'):
-            #     tmp = img.astype(np.uint8).copy()
+            #     tmp = input.astype(np.uint8).copy()
             #     kpts_backup = kpts.copy()
             #     self.draw_kpts(tmp, kpts_backup, self.radius)
             #     self.reset()
             #     cv2.setMouseCallback(name, self.click_left, [name, tmp, kpts])
-
 
             # elif key == ord('c'):
             #     with open(self.kpts_out, 'w') as f:
@@ -185,7 +182,7 @@ class Noter():
             #     break
 
             # elif key == ord('n'):
-            #     tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
+            #     tmp[:, :, :] = input.astype(np.uint8).copy()[:, :, :]
             #     np.copyto(kpts, kpts_backup)
             #     self.draw_kpts(tmp, kpts, self.radius)
             #     self.reset()
@@ -255,7 +252,7 @@ class Noter():
                     self.reset()
 
         cv2.destroyAllWindows()
-        exit(1)
+        return True
 
     def search_near(self, x, y, kpts):
         for obj in range(kpts.shape[0]):
@@ -333,11 +330,57 @@ class Noter():
         return self.__resize(img, kpts, 1 / self.scale)
 
 
+def json_to_trc(json_path, template_trc_path, target_trc_path):
+
+    with open(json_path, 'r') as f:
+        json_dict = json.load(f)
+    markers = list(json_dict.keys())
+
+    with open(template_trc_path, 'r') as f:
+        lines = f.readlines()
+        target_file_content = lines.copy()
+
+    new_header = "Frame#" + "\t" + "Time" + "\t"
+    new_coordinates = "\t\t"
+    new_values = "1" + "\t" + "0.000000" + "\t"
+
+    for i, marker in enumerate(markers):
+        # Update header
+        new_header += marker
+        new_header += "\t\t\t"
+
+        # Update coordinate names
+        index = str(i + 1)
+        x = "X" + index
+        y = "Y" + index
+        z = "Z" + index
+        new_coordinates = new_coordinates + x + "\t" + y + "\t" + z + "\t"
+
+        # Update coordinate names
+        x_val, y_val, z_val = json_dict[marker]
+        new_values += str(x_val) + "\t" + str(y_val) + "\t" + str(z_val) + "\t"
+
+    # Add new line to all the end of lines
+    new_header += "\n"
+    new_coordinates += "\n"
+    new_values += "\n"
+
+    target_file_content[3] = new_header
+    target_file_content[4] = new_coordinates
+    target_file_content[6] = new_values
+
+    if os.path.exists(target_trc_path):
+        os.remove(target_trc_path)
+    with open(target_trc_path, 'a') as w:
+        w.writelines(target_file_content)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_dir', type=str, dest='data_dir', help='Data directory.', required=True)
     parser.add_argument('--kpts_in', default=None, help="Pre-saved keypoints")
-    parser.add_argument('--kpts_out', type=str, default='../annotations3D.json', dest='kpts_out', help='Output file path')
+    parser.add_argument('--kpts_out', type=str, default='../output/annotations3D.json', dest='kpts_out',
+                        help='Output file path')
     parser.add_argument('--scale', type=float, default=1, dest='scale', help='Depth image scale.')
     parser.add_argument('--radius', type=int, default=6, dest='radius', help='Joint annotation radius.')
 
@@ -345,3 +388,7 @@ if __name__ == '__main__':
 
     noter = Noter(args['kpts_out'], args["scale"], args["radius"], args["kpts_in"])
     noter.annotate(args['data_dir'])
+
+    template_trc = "../../openSim/scaling/template_static_scale.trc"
+    target_trc = "../output/custom.trc"
+    json_to_trc(args['kpts_out'], template_trc, target_trc)
