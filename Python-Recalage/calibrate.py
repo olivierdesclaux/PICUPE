@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 # Local imports
 import videohelper
 from blobdetector import CircleDetector
+from calibrationhandler import Calibration
 
 ## Encoder for Numpy arrays to JSON
 class NumpyEncoder(json.JSONEncoder):
@@ -18,10 +19,6 @@ class NumpyEncoder(json.JSONEncoder):
 # Convenience function for killing open objects
 def stop(message):
     cv.destroyAllWindows()
-    try:
-        fps.stop()
-    except:
-        pass
     try:
         kinectStream.stop()
     except: 
@@ -44,10 +41,8 @@ checkerboardSize = (numberOfRows, numberOfColumns)
 # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1
 objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0] for x in range(totalCircles)], np.float32)
 # Arrays to store object points and image points from all the images.
-kObjectPositions = [] # 3d point in real world space
-kImagePositions = [] # 2d points in image plane.
-fObjectPositions = [] # 3d point in real world space, flir
-fImagePositions = [] # 2d points in image plane, flir
+objectPositions = [] #3d points in real world space
+imagePositionsBoth = [[],[]] # 2d points in image plane, one for each camera
 # Initialize blob detectors with circle parameters for kinect and FLIR
 kCircleDetector = CircleDetector(60, 240)
 fCircleDetector = CircleDetector(30, 240)
@@ -68,7 +63,7 @@ print("Press q to exit program.")
 
 # Loops through all cameras connected via USB
 flir, kinect = None, None
-cameraIndex = 1 # Should be 0, changed to 1 because on laptops 0 is always webcam
+cameraIndex = 0 # Should be 0, changed to 1 because on laptops 0 is always webcam
 while True:
     # CAP_DSHOW is essential for FLIR framerate
     cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
@@ -87,6 +82,10 @@ while True:
             print("Found Kinect")
             kinect = cap
             kinectStream = videohelper.VideoStream(kinect)
+        elif frameHeight == 480:
+            print("Found TEMP")
+            flir = cap
+            flirStream = videohelper.VideoStream(flir)
         # Otherwise, releases capture and moves on to next camera
         else:
             cap.release()
@@ -95,14 +94,13 @@ while True:
 if flir is None or kinect is None:
     stop("Could not open both cameras.")
 
-# Creates FPS counter for debugging code speed issues
-fps = videohelper.FPS()
 
 # Main capture and calibrate loop
-calibrationCompleted = False
-while not calibrationCompleted:
+takeMoreImages = True
+while takeMoreImages:
     # This section finds grids in images and informs the user of the remaining grids to find
-    while len(kImagePositions) < maximumCalibrationImages:
+    # It loops until at least maximumCalibrationImages grids have been found
+    while len(objectPositions) < maximumCalibrationImages:
         # Get next frame from both cameras
         if kinectStream.stopped or flirStream.stopped:
             stop("Camera disconnnected, not enough frames taken for calibration.")
@@ -112,7 +110,8 @@ while not calibrationCompleted:
 
         # Grey Kinect uses red component - blue component, flir uses a simple grayscale
         kinectGreyFrame = cv.subtract(kinectFrame[:,:,2], kinectFrame[:,:,0])
-        flirGreyFrame = cv.cvtColor(flirFrame, cv.COLOR_BGR2GRAY)
+        #flirGreyFrame = cv.cvtColor(flirFrame, cv.COLOR_BGR2GRAY)
+        flirGreyFrame = cv.subtract(flirFrame[:,:,2], flirFrame[:,:,0])
 
         # Waits secondsToSkip between checkerboards
         if (time.time() - lastCheckerboardTime > secondsToSkip):
@@ -120,45 +119,43 @@ while not calibrationCompleted:
             keypoints = kCircleDetector.get().detect(kinectGreyFrame)
             kinectFrame = cv.drawKeypoints(kinectFrame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
-            keypoints = kCircleDetector.get().detect(flirGreyFrame)
+            keypoints = fCircleDetector.get().detect(flirGreyFrame)
             flirFrame = cv.drawKeypoints(flirFrame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 
             # Tries to find chessboard corners
             kinectBoardFound, kImageCorners = cv.findCirclesGrid(kinectGreyFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
-            flirBoardFound, fImageCorners = cv.findCirclesGrid(flirGreyFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=kCircleDetector.get())
+            flirBoardFound, fImageCorners = cv.findCirclesGrid(flirGreyFrame, checkerboardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=fCircleDetector.get())
 
             if kinectBoardFound and flirBoardFound:
                 # Add them to permanent lists
-                kObjectPositions.append(objectCorners)
-                kImagePositions.append(kImageCorners)
-                fObjectPositions.append(objectCorners)
-                fImagePositions.append(fImageCorners)
+                objectPositions.append(objectCorners)
+                imagePositionsBoth[0].append(kImageCorners)
+                imagePositionsBoth[1].append(fImageCorners)
 
                 # Resets time counter
                 lastCheckerboardTime = time.time()
 
         # Draws previously used checkerboards
         poylgonColor = (20, 220, 90)
-        for index, pos in enumerate(kImagePositions):
-            points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
-            cv.polylines(kinectFrame, [points], True, poylgonColor, 2)
-        for index, pos in enumerate(fImagePositions):
-            points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
-            cv.polylines(flirFrame, [points], True, poylgonColor, 2)
+        for cameraType, imagePositions in enumerate(imagePositionsBoth):
+            frame = kinectFrame if cameraType == 0 else flirFrame
+            for pos in imagePositions:
+                points = np.array([pos[0], pos[numberOfColumns - 1], pos[totalCircles - 1], pos[numberOfColumns*(numberOfRows - 1)]], np.int32) 
+                cv.polylines(frame, [points], True, poylgonColor, 2)
 
         # Indicates how many images remain
         textColor = (80, 250, 55)
-        cv.putText(kinectFrame, 'Remaining images: ' + str(maximumCalibrationImages - len(kImagePositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
-        cv.putText(flirFrame, 'FPS: ' + str(fps.fps), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
+        cv.putText(kinectFrame, 'Remaining images: ' + str(maximumCalibrationImages - len(objectPositions)), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
 
-
-        fDim = (int(flirFrame.shape[1]/1.5), int(kinectFrame.shape[0]/1.5))
-        kDim = (int(kinectFrame.shape[1]/1.5), int(kinectFrame.shape[0]/1.5))
+        flirRatio =  flirFrame.shape[1] / flirFrame.shape[0]
+        scalingFactor = 1.5
+        kHeight, kWidth  = kinectFrame.shape[0:2]
+        fDim = (int(kHeight*flirRatio/scalingFactor), int(kHeight/scalingFactor))
+        kDim = (int(kWidth/scalingFactor), int(kHeight/scalingFactor))
         flirFrame = cv.resize(flirFrame, fDim)
         kinectFrame = cv.resize(kinectFrame, kDim)
         concatenatedFrames = cv.hconcat([kinectFrame, flirFrame])
         cv.imshow('Calibration', concatenatedFrames)
-        fps.frames += 1
 
         ## Waits for next frame or quits main loop if 'q' is pressed
         if cv.waitKey(1) == ord('q'):
@@ -168,43 +165,46 @@ while not calibrationCompleted:
     calibrationCalculated = False
     while not calibrationCalculated:
         # Calculates calibration matrices from positions
-        if len(imagePositions) > minimumCalibrationImages:
-            retroprojectionError, cameraMatrix, distortion, rotation, translation = cv.calibrateCamera(objectPositions, imagePositions, grayFrame.shape[::-1], None, None, flags=cv.CALIB_RATIONAL_MODEL+cv.CALIB_ZERO_TANGENT_DIST)
-            calibrationCalculated = True
-        else:
+        if len(objectPositions) < minimumCalibrationImages:
             # Returns to image taking
             break
+        else:
+            # Stores different kinds of errors
+            x, y, xError, yError, absError = [[],[]], [[],[]], [[],[]], [[],[]], [[],[]]
+            # Passes twice, once for FLIR, once for Kinect
+            for cameraType, imagePositions in enumerate(imagePositionsBoth):
+                # Selects image size depending on camera in use
+                imageSize = kinectFrame.shape[::-1] if cameraType == 0 else flirFrame.shape[::-1]
+                retroprojectionError, cameraMatrix, distortion, rotation, translation = cv.calibrateCamera(objectPositions, imagePositions, imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL+cv.CALIB_ZERO_TANGENT_DIST)
+                calibrationCalculated = True
 
-        # Stores different kinds of errors
-        x, y, xError, yError, absError = [], [], [], [], []
-
-        # Iterates through each image to calculate x and y errors of all corners
-        for index, imagePositionOld in enumerate(imagePositions):
-            # Reprojects objects to positions in image
-            imagePositionNew, _ = cv.projectPoints(objectPositions[index], rotation[index], translation[index], cameraMatrix, distortion)
-            # Compares pure x and y errors by subtracting two lists
-            xError.append(imagePositionNew[:,:,0].ravel() - imagePositionOld[:,:,0].ravel())
-            yError.append(imagePositionNew[:,:,1].ravel() - imagePositionOld[:,:,1].ravel())
-            # Iterates through each point to calculate more complicated absError (cannot be done directly through list)
-            for (oldPoint, newPoint) in zip(imagePositionOld, imagePositionNew):
-                x.append(oldPoint[0, 0])
-                y.append(oldPoint[0, 1])
-                # Calculates error using L2 norm (distances squared)
-                error = cv.norm(oldPoint[0], newPoint[0], cv.NORM_L2)
-                if error > maximumPointError:
-                    # If error is too large, eliminates the image in which the error is found
-                    imagePositions.pop(index)
-                    objectPositions.pop(index)
-                    # Asks to perform calibration calculation again
-                    calibrationCalculated = False
-                    print("Image removed.")
-                    break
-                else:
-                    absError.append(error)
+            # Iterates through each image to calculate x and y errors of all corners
+            for index, imagePositionOld in enumerate(imagePositions):
+                # Reprojects objects to positions in image
+                imagePositionNew, _ = cv.projectPoints(objectPositions[index], rotation[index], translation[index], cameraMatrix, distortion)
+                # Compares pure x and y errors by subtracting two lists
+                xError.append(imagePositionNew[:,:,0].ravel() - imagePositionOld[:,:,0].ravel())
+                yError.append(imagePositionNew[:,:,1].ravel() - imagePositionOld[:,:,1].ravel())
+                # Iterates through each point to calculate more complicated absError (cannot be done directly through list)
+                for (oldPoint, newPoint) in zip(imagePositionOld, imagePositionNew):
+                    x.append(oldPoint[0, 0])
+                    y.append(oldPoint[0, 1])
+                    # Calculates error using L2 norm (distances squared)
+                    error = cv.norm(oldPoint[0], newPoint[0], cv.NORM_L2)
+                    if error > maximumPointError:
+                        # If error is too large, eliminates the image in which the error is found
+                        imagePositions.pop(index)
+                        objectPositions.pop(index)
+                        # Asks to perform calibration calculation again
+                        calibrationCalculated = False
+                        print("Image removed.")
+                        break
+                    else:
+                        absError.append(error)
 
         # If all errors have been checked and no outliers found, calibration is complete
         # Otherwise, it will return to the grid-finding loop to replace outlier grids
-        calibrationCompleted = calibrationCalculated
+        takeMoreImages = not calibrationCalculated
 
 # Outputs calibration matrices to file
 with open('calibrationFile2.json', 'w') as file:
