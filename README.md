@@ -9,6 +9,13 @@ This repo will hold the entire pipeline for creating the PICUPE dataset.
 ## Installation prerequisities
 - WE WORK WITH PYTHON=3.7
 - Need to create a config.yml with all basic installations/packages
+	- Python=3.7
+	- numpy
+	- scipy
+	- matplotlib
+	- pyopengl
+	- simbody
+
 
 ### Opensim
 - Download Opensim 4.2. at [this link](https://simtk.org/frs/?group_id=91).
