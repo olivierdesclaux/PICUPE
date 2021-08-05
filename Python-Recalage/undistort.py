@@ -43,8 +43,8 @@ while True:
 
     cv.imshow('Original', frame)
     cv.imshow('Undistorted', undistortedFrame)
-    ## Waits 25 ms for next frame or quits main loop if 'q' is pressed
-    if cv.waitKey(25) == ord('q'):
+    # Quits main loop if 'q' is pressed
+    if cv.waitKey(1) == ord('q'):
         break
 
 # Release the camera and window

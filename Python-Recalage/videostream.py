@@ -37,6 +37,7 @@ class VideoStream:
         # Suppresses warnings from cap.release()
         self.stream.release()
 
+
 # Specific VideoStream class for Kinect that returns depth + rgb using pyK4a
 class KinectVideoStream:
     def __init__(self):
@@ -76,6 +77,30 @@ class KinectVideoStream:
         # Stops thread
         self.stopped = True
         self.kinect.stop()
+
+def openStream(targetHeights = []):
+    cameraIndex = 0 
+    # Array of None streams equal to number of cameras looked for
+    streams = [None] * len(targetHeights)
+    while True:
+        # CAP_DSHOW is essential for FLIR framerate
+        cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
+        # If we reach the end of available cameras
+        if not cap.isOpened():
+            break
+        else: 
+            cameraIndex += 1
+            frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+            try:
+                # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
+                pos = targetHeights.index(frameHeight)
+                print("Found", targetHeights[pos])
+                streams[pos] = VideoStream(cap)
+            except:
+                # Otherwise, releases capture and moves on to next camera
+                cap.release()
+    
+    return streams
 
 class FPS:
     def __init__(self):

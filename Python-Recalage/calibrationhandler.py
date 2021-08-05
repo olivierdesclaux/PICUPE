@@ -2,7 +2,7 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 import json
 # Local modules
-from npencoder import NumpyEncoder
+from numpyencoder import NumpyEncoder
 
 class Calibration:
     """Class for calculating and recalculating calibrations based on image and object points"""
@@ -13,21 +13,20 @@ class Calibration:
         # Index of popped positions during calculateErrors
         self.poppedIndex = []
 
-    def calibrate(self):
+    def calibrate(self, otherCalibration = None):
         # Checks that there are sufficient images remaining to perform an adequate calibration
         if len(self.objectPositions) > self.minimumImages:
             # Calculates calibration parameters
-            self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = cv.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL+cv.CALIB_ZERO_TANGENT_DIST)
-            self.distortion = self.distortion[0:7]
-            print(self.distortion)
+            self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = cv.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL)
+            self.distortion = self.distortion[:,0:8]
             # Checks for outliers using calibration parameters
-            self.calibrationDone = self.calculateErrors()
+            self.calibrationDone = self.calculateErrors(otherCalibration)
         else:
             self.calibrationDone = False
         # Returns False if there are too few images once outliers are removed, True if calibration succeeded
         return self.calibrationDone
 
-    def calculateErrors(self):
+    def calculateErrors(self, otherCalibration = None):
         self.x, self.y, self.xError, self.yError, self.absError = [], [], [], [], []
         redoCalibration = False
         # Iterates through each image to calculate x and y errors of all corners
@@ -35,6 +34,7 @@ class Calibration:
             # Reprojects objects to positions in image
             imagePositionNew, _ = cv.projectPoints(self.objectPositions[index], self.rotation[index], self.translation[index], self.cameraMatrix, self.distortion)
             imageHasOutliers = False
+            imageAbsErrors = []
             # Iterates through each point to calculate more complicated absError (cannot be done directly through list)
             for (oldPoint, newPoint) in zip(imagePositionOld, imagePositionNew):
                 # Calculates error using L2 norm (distances squared)
@@ -43,6 +43,9 @@ class Calibration:
                     # If error is too large, eliminates the image in which the error is found
                     self.imagePositions.pop(index)
                     self.objectPositions.pop(index)
+                    # Removes outlier image from other simultaneous calibration too
+                    if otherCalibration is not None:
+                        otherCalibration.imagePositions.pop(index)
                     self.poppedIndex.append(index)
                     print("Image removed.")
                     # Indicates that image has outliers
@@ -52,12 +55,13 @@ class Calibration:
                     # Does not need to check remaining points in this image
                     break
                 else:
-                    # Appends error to list for graphic representation later, with x and y coordinates
-                    self.absError.append(error)
-                    self.x.append(oldPoint[0, 0])
-                    self.y.append(oldPoint[0, 1])
+                    # Adds error to list of errors to display at the end
+                    imageAbsErrors.append(error)
             if not imageHasOutliers:
                 # Kept for graphic representation after calibration
+                self.absError.extend(imageAbsErrors)
+                self.x.extend(imagePositionOld[:,0,0].ravel())
+                self.y.extend(imagePositionOld[:,0,1].ravel())
                 self.xError.append(imagePositionNew[:,:,0].ravel() - imagePositionOld[:,:,0].ravel())
                 self.yError.append(imagePositionNew[:,:,1].ravel() - imagePositionOld[:,:,1].ravel())
 
@@ -66,7 +70,7 @@ class Calibration:
             # Returns False if there are not enough images left at some iteration
             return self.calibrate()
         else:
-            # If no incorrect points detected, returns True
+            # If no incorrect points detected, returns True to self.calibrate()
             return True
 
     def displayError(self):
@@ -75,7 +79,8 @@ class Calibration:
             # Overall error printed to command line
             print(self.name, "average retroprojection error :", round(self.retroprojectionError, 3))
 
-            fig, ax1, ax2 = plt.subplots(2, 1)
+            # side-by-side axes that cover screen
+            fig, (ax1, ax2) = plt.subplots(1,2)
             fig.set_size_inches(15, 8)
             # Scatter plot of relative errors
             scatterPlot = ax1.scatter(self.xError, self.yError)
@@ -105,7 +110,7 @@ class Calibration:
             # Outputs calibration matrices to file
             with open(filename, 'w') as file:
                 # Assigns labels to values to make JSON readable
-                dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion[0:7]}
+                dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
                 # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
                 json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
                 return True

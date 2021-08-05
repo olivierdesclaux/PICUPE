@@ -1,19 +1,20 @@
 import sys
 import cv2 as cv
-import videohelper
+import videostream
 
 camera = cv.VideoCapture(1, cv.CAP_DSHOW)
-stream = videohelper.VideoStream(camera)
-fps = videohelper.FPS()
+stream = videostream.VideoStream(camera)
+fps = videostream.FPS()
 
 while True:
     if not stream.stopped:
         frame = stream.read()
-        #frame = cv.subtract(frame[:,:,2], frame[:,:,0])
+        #frame = cv.subtract(frame[:,:,2], frame[:,:,1])
 
         cv.putText(frame, str(fps.fps), (20, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (20, 20, 250), 2)
 
         cv.imshow('frame', frame)
+        
         fps.frames += 1
 
         ## Waits for next frame or quits main loop if 'q' is pressed

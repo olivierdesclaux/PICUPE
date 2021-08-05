@@ -1,13 +1,14 @@
 import cv2 as cv
 
 class CircleDetector:
-    def __init__(self, threshold = (30,240), minArea = 25):
+    def __init__(self, threshold = (50, 141, 10), minArea = 25):
         # Blob detector
         blobParams = cv.SimpleBlobDetector_Params()
         blobParams.minDistBetweenBlobs = 4
         # Thresholds used to simplify image for detector
         blobParams.minThreshold = threshold[0]
         blobParams.maxThreshold = threshold[1]
+        blobParams.thresholdStep = threshold[2]
 
         # Filter by area
         blobParams.filterByArea = True
