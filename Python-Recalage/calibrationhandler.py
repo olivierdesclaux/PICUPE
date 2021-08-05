@@ -13,20 +13,20 @@ class Calibration:
         # Index of popped positions during calculateErrors
         self.poppedIndex = []
 
-    def calibrate(self, otherCalibration = None):
+    def calibrate(self):
         # Checks that there are sufficient images remaining to perform an adequate calibration
         if len(self.objectPositions) > self.minimumImages:
             # Calculates calibration parameters
             self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = cv.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL)
             self.distortion = self.distortion[:,0:8]
             # Checks for outliers using calibration parameters
-            self.calibrationDone = self.calculateErrors(otherCalibration)
+            self.calibrationDone = self._calculateErrors()
         else:
             self.calibrationDone = False
         # Returns False if there are too few images once outliers are removed, True if calibration succeeded
         return self.calibrationDone
 
-    def calculateErrors(self, otherCalibration = None):
+    def _calculateErrors(self):
         self.x, self.y, self.xError, self.yError, self.absError = [], [], [], [], []
         redoCalibration = False
         # Iterates through each image to calculate x and y errors of all corners
@@ -43,9 +43,7 @@ class Calibration:
                     # If error is too large, eliminates the image in which the error is found
                     self.imagePositions.pop(index)
                     self.objectPositions.pop(index)
-                    # Removes outlier image from other simultaneous calibration too
-                    if otherCalibration is not None:
-                        otherCalibration.imagePositions.pop(index)
+
                     self.poppedIndex.append(index)
                     print("Image removed.")
                     # Indicates that image has outliers
@@ -104,7 +102,7 @@ class Calibration:
     def len(self):
         return len(self.objectPositions)
 
-    def outputToFile(self, filePrefix="CalibrationFile"):
+    def writeToFile(self, filePrefix="CalibrationFile"):
         try:
             filename = filePrefix + self.name + ".json"
             # Outputs calibration matrices to file
@@ -113,6 +111,6 @@ class Calibration:
                 dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
                 # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
                 json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
-                return True
+                print ("Succesfully wrote", self.name, "calibration to file.")
         except:
-            return False
+            print("Failed to write to file.")

@@ -34,7 +34,6 @@ class VideoStream:
     def stop(self):
         # Stops thread
         self.stopped = True
-        # Suppresses warnings from cap.release()
         self.stream.release()
 
 
