@@ -23,7 +23,6 @@ def main(cameraType, circleDetector):
 
     # We can identify on which port the camera is located by looking at the height of the image in different ports.
     # The FLIR has a height of 768 pixels, the kinect in RGB has a height of 720 pixels.
-
     if cameraType == "FLIR":
         streams = openStream(targetHeights=[768])
     elif cameraType == "Kinect":
