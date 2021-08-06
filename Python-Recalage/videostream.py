@@ -77,30 +77,43 @@ class KinectVideoStream:
         self.stopped = True
         self.kinect.stop()
 
-def openStream(targetHeights = []):
-    # Function to open a set of streams for a set of targetheights
-    cameraIndex = 0 
-    # Array of None streams equal to number of cameras looked for
-    streams = [None] * len(targetHeights)
-    while True:
-        # CAP_DSHOW is essential for FLIR framerate
-        cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
-        # If we reach the end of available cameras
-        if not cap.isOpened():
-            break
-        else: 
-            cameraIndex += 1
-            frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-            try:
-                # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
-                pos = targetHeights.index(frameHeight)
-                print("Found", targetHeights[pos])
-                streams[pos] = VideoStream(cap)
-            except:
-                # Otherwise, releases capture and moves on to next camera
-                cap.release()
-    
-    return streams
+def openStream(targetHeights = [], targetCameras = []):
+    # Function to open a set of streams for a set of targetCameras/targetheights
+    # Directly opens specified camera indexes
+    if len(targetCameras) != 0:
+        streams = [None] * len(targetCameras)
+        for (streamIndex, cameraIndex) in enumerate(targetCameras):
+            cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
+            if cap.isOpened():
+                print("Found", cameraIndex)
+                streams[streamIndex] = VideoStream(cap)
+        return streams
+
+    # Searches for cameras using height
+    elif len(targetHeights) != 0:
+        cameraIndex = 0 
+        # Array of None streams equal to number of cameras looked for
+        streams = [None] * len(targetHeights)
+        while True:
+            # CAP_DSHOW is essential for FLIR framerate
+            cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
+
+            # If we reach the end of available cameras
+            if not cap.isOpened():
+                break
+            else: 
+                cameraIndex += 1
+                frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+                try:
+                    # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
+                    pos = targetHeights.index(frameHeight)
+                    print("Found", targetHeights[pos])
+                    streams[pos] = VideoStream(cap)
+                except:
+                    # Otherwise, releases capture and moves on to next camera
+                    cap.release()
+        
+        return streams
 
 class FPS:
     def __init__(self):

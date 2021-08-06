@@ -15,29 +15,30 @@ kCircleDetector = CircleDetector()
 fCircleDetector = CircleDetector(minArea = 12)
 
 ## Global calibration parameters
-# Skips X seconds between each checkerboard to increase variability of calibration images
-secondsToSkip = 2
 # Maximum number of checkerboard images to obtain
-initialCalibImages = 15
+initialCalibImages = 30
 # Minimum number of checkerboard images to calculate matrices after removing outliers
-minCalibImages = initialCalibImages - 5
+minCalibImages = initialCalibImages - 10
 # Maximum error to tolerate on each point, in pixels
-maximumPointError = 6
+maximumPointError = 5
 
 # Initial message to user
 print("Press q to exit program.")
 
 # Loops through all cameras connected via USB
-streams = [kinectStream, flirStream] = videostream.openStream([720, 480]) # Only for webcam
-#[kinectStream, flirStream] = videostream.openStream([720, 768]) # True FLIR height
-            
+streams = [kinectStream, flirStream] = videostream.openStream(targetCameras=[1, 0]) # Only for webcam
+#streams = [kinectStream, flirStream] = videostream.openStream(targetHeights = [720, 768]) # FLIR
+
+flirStream.stream.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
+flirStream.stream.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
+
 if flirStream is None or kinectStream is None:
     stop("Could not open both cameras.", streams)
 
 # Creates objects to continually find circle grids in images
 try:
-    gridFinders = [kGridFinder, fGridFinder] = [CircleGridFinder([kinectStream], ["rgb"], [kCircleDetector], initialCalibImages, secondsToSkip=secondsToSkip), 
-                                                CircleGridFinder([flirStream], ["rgb"], [fCircleDetector], initialCalibImages, secondsToSkip=secondsToSkip)]
+    gridFinders = [kGridFinder, fGridFinder] = [CircleGridFinder([kinectStream], ["rgb"], [kCircleDetector], initialCalibImages), 
+                                                CircleGridFinder([flirStream], ["rgb"], [fCircleDetector], initialCalibImages)]
 except:
     stop("Could not create both grid finders", streams)
 

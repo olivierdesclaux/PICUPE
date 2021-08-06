@@ -15,14 +15,16 @@ fFilename = str('CalibrationFileFLIR.json')
 if len(sys.argv) > 1:
     kFilename = str(sys.argv[1]) # First argv is undistort.py, second is kinect filename
     fFilename = str(sys.argv[2]) # Third is flir filename
-    #dFilename = str(sys.argv[3]) # Third is depth filename
 
 def openCalibrationFile(filename):
-    with open(filename, 'r') as file:
-        calibrationData = json.load(file)
-        cameraMatrix = np.asarray(calibrationData['CameraMatrix'])
-        distortion = np.asarray(calibrationData['DistortionCoefficients'])
-        return cameraMatrix, distortion
+    try:
+        with open(filename, 'r') as file:
+            calibrationData = json.load(file)
+            cameraMatrix = np.asarray(calibrationData['CameraMatrix'])
+            distortion = np.asarray(calibrationData['DistortionCoefficients'])
+            return cameraMatrix, distortion
+    except:
+        stop("Unable to open calibration files.")
 
 # Open calibration files and read contents
 kMatrix, kDist = openCalibrationFile(kFilename)
@@ -30,15 +32,15 @@ fMatrix, fDist = openCalibrationFile(fFilename)
 
 # If empty, quit
 if not kDist.any():
-    sys.exit("Cannot open Kinect calibration file.")
+    sys.exit("Cannot read matrices from Kinect calibration file.")
 if not fDist.any():
-    sys.exit("Cannot open Flir calibration file.")
+    sys.exit("Cannot read matrices from FLIR calibration file.")
 
 # Open video streams from cameras
-[flirStream, kinectStream] = videostream.openStream([480, 720]) # Only for webcam
+streams = [flirStream, kinectStream] = videostream.openStream([480, 720]) # Only for webcam
 #[flirStream, kinectStream] = videostream.openStream([768, 720])
-if flirStream is None or kinectStream is None:
-    stop([flirStream, kinectStream], "Could not open both cameras.")
+if None in streams:
+    stop("Could not open both cameras.")
 
 ## Program global variables
 # Termination criteria : 1st parameter is flag, 2nd is maximum iterations, 3rd is maximum epsilon

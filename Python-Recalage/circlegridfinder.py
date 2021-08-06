@@ -47,6 +47,7 @@ class CircleGridFinder:
                     frames.append(self.grayify(frame, streamType))
             # Checks for circles grid in each frame
             boardsFound = True
+            # List of grid positions in each frame of all streams
             allGridPositions = []
             for (frame, circleDetector) in zip(frames, self.circleDetectors):
                 # CALIB_CB_SYMMETRIC_GRID for grid of parallel rows and cols, CALIB_CB_CLUSTERING for quicker results
