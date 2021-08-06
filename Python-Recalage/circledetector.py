@@ -4,7 +4,7 @@ class CircleDetector:
     def __init__(self, threshold = (30, 181, 10), minArea = 20):
         # Blob detector
         blobParams = cv.SimpleBlobDetector_Params()
-        blobParams.minDistBetweenBlobs = 4
+        blobParams.minDistBetweenBlobs = 5
         # Thresholds used to simplify image for detector
         blobParams.minThreshold = threshold[0]
         blobParams.maxThreshold = threshold[1]

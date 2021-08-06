@@ -9,8 +9,8 @@ from calibrationhandler import CalibrationHandler
 from utils import stop
 
 
-def main(cameraType, circleDetector):
 
+def main(cameraType, circleDetector):
     ## Global calibration parameters
     # Maximum number of checkerboard images to obtain
     initialCalibImages = 15

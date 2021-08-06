@@ -56,7 +56,7 @@ class CircleGridFinder:
             allGridPositions = []
             for (frame, circleDetector) in zip(frames, self.circleDetectors):
                 # CALIB_CB_SYMMETRIC_GRID for grid of parallel rows and cols, CALIB_CB_CLUSTERING for quicker results
-                ret, pos = cv.findCirclesGrid(frame, self.boardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=circleDetector.get())
+                ret, pos = cv.findCirclesGrid(frame, self.boardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID, blobDetector=circleDetector.get())
                 if not ret:
                     # If not found, indicates in boardsFound
                     boardsFound = False
@@ -88,11 +88,14 @@ class CircleGridFinder:
 
     def drawCircles(self, frames):
         # Assumes if multiple frames, there are corresponding multiple circleDetectors
-        for (frame, frameType, circleDetector) in zip(frames, self.streamTypes, self.circleDetectors):
+        for (frame, frameType, circleDetector, imagePosition) in zip(frames, self.streamTypes, self.circleDetectors, self.allImagePositions):
+            # Detects circles in gray version of frame
             grayFrame = self.grayify(frame, frameType)
             keypoints = circleDetector.get().detect(grayFrame)
-            # Draws circles in place on arguments
+            # Draws circles in place on frames
             frame = cv.drawKeypoints(frame, keypoints, frame, (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS + cv.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG)
+            if imagePosition:
+                cv.drawChessboardCorners(frame, self.boardSize, imagePosition[-1], True)
 
     def drawOutlines(self, frames):
         # Draws previously used checkerboards using OpenCV lines in frame
