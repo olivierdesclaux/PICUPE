@@ -1,6 +1,7 @@
 import cv2 as cv
 import matplotlib.pyplot as plt
 import json
+import os
 # Local modules
 from numpyencoder import NumpyEncoder
 
@@ -18,8 +19,6 @@ class CalibrationHandler:
         if len(self.objectPositions) > self.minimumImages:
             # Calculates calibration parameters
             self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = cv.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, None, None, flags=cv.CALIB_RATIONAL_MODEL)
-            print(self.cameraMatrix)
-            print(self.distortion)
             self.distortion = self.distortion[:,0:8] # Rational model uses 8 parameters, but 12 are returned (last 4 are 0)
             # Checks for outliers using calibration parameters
             self.calibrationDone = self._calculateErrors()
@@ -75,7 +74,7 @@ class CalibrationHandler:
             # If no incorrect points detected, returns True to self.calibrate()
             return True
 
-    def displayError(self):
+    def displayError(self, saveDirectory):
         # Checks that error values exist to avoid crashing
         if self.calibrationDone:
             # Overall error printed to command line
@@ -95,21 +94,21 @@ class CalibrationHandler:
             colorBar = fig.colorbar(contourPlot)
             colorBar.ax.set_ylabel('Absolute error')
             plt.axis('scaled')
+            plt.savefig(os.path.join(saveDirectory, 'ErrorCharts_' + self.name + '.png'))
             plt.show()
-            plt.savefig('ErrorCharts_' + self.name + '.png')
-
     def len(self):
         return len(self.objectPositions)
 
-    def writeToFile(self, filePrefix="CalibrationFile_"):
+    def writeToFile(self, saveDirectory, filePrefix="CalibrationFile_"):
+
         try:
-            filename = filePrefix + self.name + ".json"
+            filename = os.path.join(saveDirectory, filePrefix + self.name + ".json")
             # Outputs calibration matrices to file
             with open(filename, 'w') as file:
                 # Assigns labels to values to make JSON readable
                 dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
                 # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
                 json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
-                print ("Succesfully wrote", self.name, "calibration to file.")
+                print("Succesfully wrote", self.name, "calibration to file.")
         except:
             print("Failed to write to file.")

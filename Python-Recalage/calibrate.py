@@ -2,6 +2,8 @@ from circlegridfinder import CircleGridFinder
 import numpy as np
 import cv2 as cv
 import argparse
+from datetime import datetime
+import os
 # Local modules
 from videostream import openStream, StreamType
 from circledetector import CircleDetector
@@ -10,7 +12,7 @@ from utils import stop
 
 
 
-def main(cameraType, circleDetector):
+def main(cameraType, circleDetector, saveDirectory):
     ## Global calibration parameters
     # Maximum number of checkerboard images to obtain
     initialCalibImages = 15
@@ -69,14 +71,16 @@ def main(cameraType, circleDetector):
             # All grids have now been found, proceeding to calibration
             # Gets frame size for this stream
 
-            frameSize = frame[:,:,0].shape[::-1]
+            frameSize = frame[:, :, 0].shape[::-1]
             # Creates Calibration object to handle cv.calibrateCamera() and error-checking
             calibration = CalibrationHandler(gridFinder.name, gridFinder.objectPositions, gridFinder.allImagePositions[0], frameSize, minCalibImages, maximumPointError)
             if calibration.calibrate():
             # If the calibration succeeds, display the errors, print to a file and stop taking images from this stream
                 print(gridFinder.name + " calibration successful.")
-                calibration.displayError()
-                calibration.writeToFile()
+                if not os.path.isdir(saveDirectory):
+                    os.mkdir(saveDirectory)
+                calibration.displayError(saveDirectory)
+                calibration.writeToFile(saveDirectory)
                 takeMoreImages = False
             else:
             # Otherwise, return to grid-finding loop
@@ -92,5 +96,7 @@ if __name__ == '__main__':
     cameraType = args["cameraType"]
     #Initialise circle detector
     circleDetector = CircleDetector()
-
-    main(cameraType, circleDetector)
+    now = datetime.now()
+    dt_string = now.strftime("%d-%m-%Y_%H%M")
+    saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
+    main(cameraType, circleDetector, saveDirectory)
