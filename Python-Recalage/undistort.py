@@ -2,8 +2,11 @@ import sys
 import numpy as np
 import cv2 as cv
 import json
+# Local modules
+from videostream import openStream
+from utils import stop
 
-filename = str('calibrationFile.json')
+filename = str('CalibrationFileWebcam.json')
 
 if len(sys.argv) > 1:
     filename = str(sys.argv[1]) # First argv is undistort.py, second is filename
@@ -15,24 +18,19 @@ with open(filename, 'r') as file:
     distortion = np.asarray(calibrationData['DistortionCoefficients'])
 
 if not distortion.any():
-    sys.exit("Cannot open complete calibration file.")
+    stop("Cannot open complete calibration file.")
 
 # Open camera
-cap = cv.VideoCapture(0)
-if not cap.isOpened():
-    sys.exit("Cannot open camera.")
+[videoStream] = openStream(targetCameras=[0])
 
 # Calculate optimal cropping for distortion using 1st frame
-frameIsRead, tempframe = cap.read()
+tempframe = videoStream.read()
 h, w = tempframe.shape[:2]
 newCameraMatrix, croppingValues = cv.getOptimalNewCameraMatrix(cameraMatrix, distortion, (w,h), 1, (w,h))
 
-while True:
+while not videoStream.stopped:
     # Capture frame-by-frame
-    frameIsRead, frame = cap.read()
-    if not frameIsRead:
-        print("Stream end.")
-        break
+    frame = videoStream.read()
 
     # Undo camera distorsion
     undistortedFrame = cv.undistort(frame, cameraMatrix, distortion, None, newCameraMatrix)
@@ -45,8 +43,7 @@ while True:
     cv.imshow('Undistorted', undistortedFrame)
     # Quits main loop if 'q' is pressed
     if cv.waitKey(1) == ord('q'):
-        break
+        stop("User exit.", [videoStream])
 
 # Release the camera and window
-cap.release()
-cv.destroyAllWindows()
+stop("Camera closed", [videoStream])

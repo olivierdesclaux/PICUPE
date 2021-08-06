@@ -3,15 +3,15 @@ import cv2 as cv
 import time
 from threading import Thread
 # Local modules
-import videostream
+from videostream import VideoStream, StreamType
 from circledetector import CircleDetector
 
 class CircleGridFinder:
     """Finds circle grids in 1 or more target images"""
-    def __init__(self, streams, streamTypes, circleDetectors, minImages, secondsToSkip = 2, numRows = 12, numCols = 12):
+    def __init__(self, name, streams, streamTypes, circleDetectors, minImages, secondsToSkip = 2, numRows = 12, numCols = 12):
         if len(streams) != len(streamTypes) or len(streams) != len(circleDetectors):
             raise ValueError("Length of argument lists do not match.")
-        self.streams, self.streamTypes, self.circleDetectors, self.minImages, self.secondsToSkip = streams, streamTypes, circleDetectors, minImages, secondsToSkip
+        self.name, self.streams, self.streamTypes, self.circleDetectors, self.minImages, self.secondsToSkip = name, streams, streamTypes, circleDetectors, minImages, secondsToSkip
         # Array of float32 object points to add to objectPoints list
         # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1, repeating numRows times
         # Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
@@ -23,10 +23,15 @@ class CircleGridFinder:
         self.allImagePositions = [[] for i in streams] # 2d points in image plane, one list for each camera
         # Variable for handling thread
         self.running = False
+        self.finished = False
 
     def start(self):
-        self.running = True
-        Thread(target=self._find, args=(), daemon=True).start()
+        if not self.running:
+            self.running = True
+            self.finished = False
+            Thread(target=self._find, args=(), daemon=True).start()
+        else:
+            raise RuntimeError("Tried to start gridFinder while still running.")
 
     def stop(self):
         self.running = False
@@ -52,10 +57,11 @@ class CircleGridFinder:
             for (frame, circleDetector) in zip(frames, self.circleDetectors):
                 # CALIB_CB_SYMMETRIC_GRID for grid of parallel rows and cols, CALIB_CB_CLUSTERING for quicker results
                 ret, pos = cv.findCirclesGrid(frame, self.boardSize, flags=cv.CALIB_CB_SYMMETRIC_GRID+cv.CALIB_CB_CLUSTERING, blobDetector=circleDetector.get())
-                allGridPositions.append(pos)
                 if not ret:
                     # If not found, indicates in boardsFound
                     boardsFound = False
+                else:
+                    allGridPositions.append(pos)
 
             # Only adds grids to main list if grids found in all images
             if boardsFound:
@@ -71,12 +77,13 @@ class CircleGridFinder:
         
         # When all images found, indicates it has finished and stops thread
         self.running = False
+        self.finished = True
 
     def grayify(self, frame, frameType):
         # Turns frames gray based on frame type
-        if frameType == "rgb":
+        if frameType == "rgb" or frameType == StreamType.rgb:
             return cv.subtract(frame[:,:,2], frame[:,:,0])
-        elif frameType == "ir":
+        elif frameType == "ir" or frameType == StreamType.ir:
             return cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
 
     def drawCircles(self, frames):
@@ -100,4 +107,3 @@ class CircleGridFinder:
 
     def len(self):
         return len(self.objectPositions)
-    

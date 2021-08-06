@@ -1,15 +1,21 @@
 from threading import Thread, Timer
+from enum import Enum
 import cv2 as cv
 import pyk4a as k4a
+# Local modules
+from utils import stop
 
 class VideoStream:
-    def __init__(self, videocapture):
+    def __init__(self, videocapture, flag=""):
         # initialize the file video stream
-        self.stream = videocapture
-        self.stream.set(cv.CAP_PROP_BUFFERSIZE, 2)
+        self.capture = videocapture
+        self.capture.set(cv.CAP_PROP_BUFFERSIZE, 2)
+        if "webcam" in flag:
+            self.capture.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
+            self.capture.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
         # ESSENTIAL to maintain stream FPS for FLIR camera
-        self.stream.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self.grabbed, self.frame = self.stream.read()
+        self.capture.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        self.grabbed, self.frame = self.capture.read()
         # used to indicate if the thread should be stopped or not
         self.stopped = False
         # Thread used to constantly grab new frames
@@ -22,7 +28,7 @@ class VideoStream:
                 return
             else:
                 # Grab next frame
-                self.grabbed, self.frame = self.stream.read()
+                self.grabbed, self.frame = self.capture.read()
                 cv.waitKey(1)
                 # Ends thread if read() fails
                 if not self.grabbed:
@@ -34,7 +40,7 @@ class VideoStream:
     def stop(self):
         # Stops thread
         self.stopped = True
-        self.stream.release()
+        self.capture.release()
 
 
 # Specific VideoStream class for Kinect that returns depth + rgb using pyK4a
@@ -76,8 +82,13 @@ class KinectVideoStream:
         # Stops thread
         self.stopped = True
         self.kinect.stop()
+    
+class StreamType(Enum):
+    rgb = 0
+    ir = 1
+    depth = 2
 
-def openStream(targetHeights = [], targetCameras = []):
+def openStream(targetHeights = [], targetCameras = [], flags = []):
     # Function to open a set of streams for a set of targetCameras/targetheights
     # Directly opens specified camera indexes
     if len(targetCameras) != 0:
@@ -86,8 +97,7 @@ def openStream(targetHeights = [], targetCameras = []):
             cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
             if cap.isOpened():
                 print("Found", cameraIndex)
-                streams[streamIndex] = VideoStream(cap)
-        return streams
+                streams[streamIndex] = VideoStream(cap, flags[streamIndex])
 
     # Searches for cameras using height
     elif len(targetHeights) != 0:
@@ -113,6 +123,10 @@ def openStream(targetHeights = [], targetCameras = []):
                     # Otherwise, releases capture and moves on to next camera
                     cap.release()
         
+    # Once streams have been searched for by index or by height, checks if they are all open
+    if None in streams:
+        stop("Unable to open all cameras.", streams)
+    else:
         return streams
 
 class FPS:

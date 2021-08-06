@@ -5,7 +5,7 @@ import sys
 import time
 # Local modules
 import videostream
-from convenience import stop
+from utils import stop
 from circledetector import CircleDetector
 
 # Default filename
