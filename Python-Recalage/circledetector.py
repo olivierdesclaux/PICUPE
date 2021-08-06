@@ -1,7 +1,7 @@
 import cv2 as cv
 
 class CircleDetector:
-    def __init__(self, threshold = (50, 141, 10), minArea = 25):
+    def __init__(self, threshold = (30, 181, 10), minArea = 20):
         # Blob detector
         blobParams = cv.SimpleBlobDetector_Params()
         blobParams.minDistBetweenBlobs = 4

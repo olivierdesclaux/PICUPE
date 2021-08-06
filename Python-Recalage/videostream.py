@@ -78,6 +78,7 @@ class KinectVideoStream:
         self.kinect.stop()
 
 def openStream(targetHeights = []):
+    # Function to open a set of streams for a set of targetheights
     cameraIndex = 0 
     # Array of None streams equal to number of cameras looked for
     streams = [None] * len(targetHeights)

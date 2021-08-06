@@ -11,8 +11,8 @@ from convenience import stop, scaleForHconcat
 
 # Initialize blob detectors with circle parameters for kinect and FLIR
 kCircleDetector = CircleDetector()
-#fCircleDetector = CircleDetector(threshold = (30, 240))
-fCircleDetector = CircleDetector(minArea = 15)
+#fCircleDetector = CircleDetector(threshold = (30, 221, 20))
+fCircleDetector = CircleDetector(minArea = 12)
 
 ## Global calibration parameters
 # Skips X seconds between each checkerboard to increase variability of calibration images
@@ -55,8 +55,8 @@ while takeMoreImages:
             else:
                 # Reads a new frame to display to user as GUI
                 frame = stream.read()
+                gridFinder.drawCircles([frame]) # Large performance impact, displays circles detected in real time
                 gridFinder.drawOutlines([frame]) # Small performance impact, displays previously found grids as green lines
-
                 # Indicates how many images remain in upper left
                 textColor = (80, 250, 55)
                 cv.putText(frame, 'Remaining images: ' + str(initialCalibImages - gridFinder.len()), (50, 50), cv.FONT_HERSHEY_SIMPLEX, 1, textColor, 2)
@@ -86,7 +86,7 @@ while takeMoreImages:
             # Prints calibration matrices to file
             kinectCalibration.writeToFile()
             flirCalibration.writeToFile()
-            
+
             # Breaks out of image-taking loop
             takeMoreImages = False
             cv.destroyAllWindows()

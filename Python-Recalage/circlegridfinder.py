@@ -44,11 +44,7 @@ class CircleGridFinder:
                 else:
                     frame = stream.read()
                     # Changes frame to single channel, either red - blue (rgb) or direct grayscale (ir)
-                    if streamType == "rgb":
-                        frame = cv.subtract(frame[:,:,2], frame[:,:,0])
-                    elif streamType == "ir":
-                        frame = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-                    frames.append(frame)
+                    frames.append(self.grayify(frame, streamType))
             # Checks for circles grid in each frame
             boardsFound = True
             allGridPositions = []
@@ -75,12 +71,20 @@ class CircleGridFinder:
         # When all images found, indicates it has finished and stops thread
         self.running = False
 
+    def grayify(self, frame, frameType):
+        # Turns frames gray based on frame type
+        if frameType == "rgb":
+            return cv.subtract(frame[:,:,2], frame[:,:,0])
+        elif frameType == "ir":
+            return cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+
     def drawCircles(self, frames):
         # Assumes if multiple frames, there are corresponding multiple circleDetectors
-        for (frame, circleDetector) in zip(frames, self.circleDetectors):
-            keypoints = circleDetector.get().detect(frame)
+        for (frame, frameType, circleDetector) in zip(frames, self.streamTypes, self.circleDetectors):
+            grayFrame = self.grayify(frame, frameType)
+            keypoints = circleDetector.get().detect(grayFrame)
             # Draws circles in place on arguments
-            frame = cv.drawKeypoints(frame, keypoints, np.array([]), (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+            frame = cv.drawKeypoints(frame, keypoints, frame, (255, 255, 255), cv.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS + cv.DRAW_MATCHES_FLAGS_DRAW_OVER_OUTIMG)
 
     def drawOutlines(self, frames):
         # Draws previously used checkerboards using OpenCV lines in frame
