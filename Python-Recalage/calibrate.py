@@ -19,7 +19,7 @@ initialCalibImages = 15
 minCalibImages = 10
 # Maximum error to tolerate on each point during calibration, in pixels
 # Beyond this, grid is rejected as outlier
-maximumPointError = 9
+maximumPointError = 3
 
 # Initial message to user
 print("Press q to exit program.")
