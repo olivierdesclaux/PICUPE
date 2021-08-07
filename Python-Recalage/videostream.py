@@ -55,7 +55,7 @@ class KinectVideoStream:
                     synchronized_images_only=True,
                 ))
         self.kinect.start()
-        self.frame  = self.kinect.get_capture()
+        self.frame = self.kinect.get_capture()
     
         # used to indicate if the thread should be stopped or not
         self.stopped = False
@@ -70,7 +70,7 @@ class KinectVideoStream:
             else:
                 # Grab next frame
                 try:
-                    self.frame  = self.kinect.get_capture()
+                    self.frame = self.kinect.get_capture()
                 except:
                 # Ends thread if get_capture() fails
                     self.stopped = True                        
