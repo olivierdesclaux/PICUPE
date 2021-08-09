@@ -1,4 +1,3 @@
-from circlegridfinder import CircleGridFinder
 import numpy as np
 import cv2 as cv
 import argparse
@@ -8,14 +7,15 @@ import os
 from videostream import openStreams, StreamType
 from circledetector import CircleDetector
 from calibrationhandler import CalibrationHandler
+from circlegridfinder import CircleGridFinder
 from utils import stop
 
 def main(cameraType, saveDirectory):
     ## Global calibration parameters
     # Maximum number of checkerboard images to obtain
-    initialCalibImages = 15
+    initialCalibImages = 30
     # Minimum number of checkerboard images to calculate matrices after removing outliers
-    minCalibImages = 10
+    minCalibImages = 27
     # Maximum error to tolerate on each point during calibration, in pixels
     # Beyond this, grid is rejected as outlier
     maximumPointError = 3
@@ -44,7 +44,7 @@ def main(cameraType, saveDirectory):
     gridFinder = CircleGridFinder(cameraType, [stream], [type], [circleDetector], initialCalibImages)
 
     # Main capture and calibrate loop
-    print("Calibrating " + gridFinder.name)
+    print("Taking grid pictures...")
     # This section asks the user to find initialCalibImages grids in each camera
     takeMoreImages = True # Used to retake images if too many are removed during calibration
     while takeMoreImages:
@@ -70,7 +70,7 @@ def main(cameraType, saveDirectory):
 
         frameSize = frame[:, :, 0].shape[::-1]
         # Creates Calibration object to handle cv.calibrateCamera() and error-checking
-        calibration = CalibrationHandler(gridFinder.name, gridFinder.objectPositions, gridFinder.allImagePositions[0], frameSize, minCalibImages, maximumPointError)
+        calibration = CalibrationHandler(gridFinder.objectPositions, gridFinder.allImagePositions[0], frameSize, minCalibImages, maximumPointError)
         if calibration.calibrate():
             # Creates filepath for results of calibration
             if not os.path.isdir(saveDirectory):
@@ -88,11 +88,11 @@ def main(cameraType, saveDirectory):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--camera', type=str, dest='cameraType', help='Kinect or FLIR', required=True)
+    parser.add_argument('-c', type=str, dest='cameraType', help='Kinect or FLIR', required=True)
     args = parser.parse_args().__dict__
     cameraType = args["cameraType"]
     #Initialise circle detector
     now = datetime.now()
-    dt_string = now.strftime("%d-%m-%Y_%H%M")
+    dt_string = now.strftime("%d-%m-%Y_%H-%M")
     saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
     main(cameraType, saveDirectory)

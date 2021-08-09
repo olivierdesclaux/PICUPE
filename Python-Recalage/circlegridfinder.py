@@ -15,7 +15,7 @@ class CircleGridFinder:
         # Array of float32 object points to add to objectPoints list
         # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1, repeating numRows times
         # Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
-        self.objectCorners = np.array([[2 * (x % numCols) + np.floor(x/numCols) % 2, np.floor(x / numCols), 0] for x in range(numCols * numRows)], np.float32)
+        self.objectCorners = np.array([[2 * (x % numRows) + np.floor(x/numRows) % 2, np.floor(x / numRows), 0] for x in range(numRows * numCols)], np.float32)
         self.numRows, self.numCols = numRows, numCols
         self.boardSize = (numRows, numCols)
         # Arrays to store object points and image points from all the images.

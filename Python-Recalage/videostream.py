@@ -143,7 +143,7 @@ def openStreams(targetHeights = [], targetCameras = [], flags = []):
         
     # Once streams have been searched for by index or by height, checks if they are all open
     if None in streams:
-        stop("Unable to open all cameras.", streams)
+        raise Exception("Unable to open cameras.")
     else:
         return streams
 

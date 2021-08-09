@@ -3,128 +3,114 @@ import numpy as np
 import json
 import sys
 import time
+import argparse
+from datetime import datetime
+import os
 # Local modules
-import videostream
-from utils import stop
+from videostream import openStreams, StreamType
+from utils import scaleForHconcat, stop, openCalibrationFile
 from circledetector import CircleDetector
+from circlegridfinder import CircleGridFinder
 
-# Default filename
-kFilename = str('CalibrationFileKinect.json')
-fFilename = str('CalibrationFileFLIR.json')
+def main(cameraTypes, calibFile1, calibFile2):
 
-if len(sys.argv) > 1:
-    kFilename = str(sys.argv[1]) # First argv is undistort.py, second is kinect filename
-    fFilename = str(sys.argv[2]) # Third is flir filename
+    # Open calibration files and read contents
+    kMatrix, kDist = openCalibrationFile(calibFile1)
+    fMatrix, fDist = openCalibrationFile(calibFile2)
 
-def openCalibrationFile(filename):
-    try:
-        with open(filename, 'r') as file:
-            calibrationData = json.load(file)
-            cameraMatrix = np.asarray(calibrationData['CameraMatrix'])
-            distortion = np.asarray(calibrationData['DistortionCoefficients'])
-            return cameraMatrix, distortion
-    except:
-        stop("Unable to open calibration files.")
+    # If empty, quit
+    if not kDist.any():
+        sys.exit("Cannot read matrices from Kinect calibration file.")
+    if not fDist.any():
+        sys.exit("Cannot read matrices from FLIR calibration file.")
 
-# Open calibration files and read contents
-kMatrix, kDist = openCalibrationFile(kFilename)
-fMatrix, fDist = openCalibrationFile(fFilename)
 
-# If empty, quit
-if not kDist.any():
-    sys.exit("Cannot read matrices from Kinect calibration file.")
-if not fDist.any():
-    sys.exit("Cannot read matrices from FLIR calibration file.")
-
-# Open video streams from cameras
-streams = [flirStream, kinectStream] = videostream.openStream([480, 720]) # Only for webcam
-#[flirStream, kinectStream] = videostream.openStream([768, 720])
-if None in streams:
-    stop("Could not open both cameras.")
-
-## Program global variables
-# Termination criteria : 1st parameter is flag, 2nd is maximum iterations, 3rd is maximum epsilon
-criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 50, 0.0001)
-# Corner finder variables
-numberOfRows = 12
-numberOfColumns = 12
-totalCircles = numberOfRows*numberOfColumns
-checkerboardSize = (numberOfRows, numberOfColumns)
-
-# Array of float32 points
-# Last axis (z) is always 0
-# Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
-# X axis (columns) increments 0, 1, 2, ... numberOfColumns-1
-objectCorners = np.array([[x % numberOfColumns, np.floor(x / numberOfColumns), 0] for x in range(totalCircles)], np.float32)
-# Arrays to store object points and image points from all the images.
-objectPositions = [] #3d points in real world space
-imagePositionsBoth = [[],[]] # 2d points in image plane, one for each camera
-# Initialize blob detectors with circle parameters for kinect and FLIR
-kCircleDetector = CircleDetector()
-#fCircleDetector = CircleDetector(threshold = (40, 180, 20))
-fCircleDetector = CircleDetector(minArea = 15)
-
-# Skips X seconds between each checkerboard to increase variability of calibration images
-secondsToSkip = 2
-lastCheckerboardTime = time.time()
-# Number of image to take for rectification
-rectImageCount = 25
-
-# Initial message to user
-print("Press q to exit program.")
-while len(objectPositions) < rectImageCount:
-    # Get next frame from both cameras
-    if kinectStream.stopped or flirStream.stopped:
-        stop([flirStream, kinectStream], "Camera disconnnected, not enough frames taken for calibration.")
+    if "F" in cameraTypes and "K" in cameraTypes: # FLIR + Kinect
+        streams = openStreams(targetHeights=[720, 768])
+        types = [StreamType.rgb, StreamType.ir]
+    if "W" in cameraTypes and "K" in cameraTypes: # Webcam + Kinect
+        streams = openStreams(targetCameras=[0, 1])
+        types = [StreamType.rgb, StreamType.rgb]
     else:
-        kinectFrame = kinectStream.read()
-        flirFrame = flirStream.read()
-# Stereo calibration in OpenCV, using keypoints identified previously
-# This obtains the R and T matrices to transform between 2 CAMERA POSITIONS, plus improved camera matrices and distortion coefficients
-# Uses previous calibration parameters as a starting point (CALIB_USE_INSTRINSIC_GUESS)
-stereoSuccess, kMatrix, kDist, fMatrix, fDist, R, T, E, F = cv.stereoCalibrate( 
-    objectPositions, imagePositionsBoth[0], imagePositionsBoth[1], 
-    kMatrix, kDist, fMatrix, fDist,
-    kSize, flags=cv.CALIB_FIX_INTRINSIC, criteria=criteria)
-if stereoSuccess:
-    print("Stereo calibration successful")
-    ### TEMP CODE ###
-    h, w = kinectFrame.shape[:2]
-    newKMatrix, croppingValues = cv.getOptimalNewCameraMatrix(kMatrix, kDist, (w,h), 1, (w,h))
-    undistortedK = cv.undistort(kinectFrame, kMatrix, kDist, None, newKMatrix)
-    cv.imshow('UndistortedK', undistortedK)
-    h, w = flirFrame.shape[:2]
-    newFMatrix, croppingValues = cv.getOptimalNewCameraMatrix(fMatrix, fDist, (w,h), 1, (w,h))
-    undistortedF = cv.undistort(flirFrame, fMatrix, fDist, None, newFMatrix)
-    cv.imshow('UndistortedF', undistortedF)
-    # Alpha can be varied from 0 (no black pixels) to 1 (all pixels) in undistorted image
-    # This obtains precise R and T matrices to transforms PIXELS between images
-    R1, R2, P1, P2, Q, roi1, roi2 = cv.stereoRectify(kMatrix, kDist, fMatrix, fDist, kSize, R, T, alpha=1)
-    # Calculates maps for undistorting each image into a rectified state
-    kMapx, kMapy = cv.initUndistortRectifyMap(kMatrix, kDist, R1, P1, kSize, cv.CV_32FC1) #try CV_32FC2
-    fMapx, fMapy = cv.initUndistortRectifyMap(fMatrix, fDist, R1, P1, fSize, cv.CV_32FC1) #try CV_32FC2
+        raise Exception("Invalid camera types selected.")
 
-# Displayed undistorted image for debugging, should be in another file!
-if cv.waitKey(25000) == 'q':
-    pass
-while True:
-    kinectFrame = kinectStream.read()
-    flirFrame = flirStream.read()
-    # Maps pixels from FLIR to Kinect image
-    flirRemapped = cv.remap(flirFrame, fMapx, fMapy, cv.INTER_LINEAR)
+    # Number of images to take for rectification
+    rectImageCount = 15
+    # termination criteria for iterative functions
+    criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 50, 0.0001)
 
-    # Scales FLIR image to same height as Kinect for display side-by-side
-    flirRatio =  flirRemapped.shape[1] / flirRemapped.shape[0]
-    scalingFactor = 1.5 # Reduces overall window size to fit on monitor
-    kHeight, kWidth  = kinectFrame.shape[0:2]
-    fDim = (int(kHeight*flirRatio/scalingFactor), int(kHeight/scalingFactor))
-    kDim = (int(kWidth/scalingFactor), int(kHeight/scalingFactor))
-    flirRemapped = cv.resize(flirRemapped, fDim)
-    kinectFrame = cv.resize(kinectFrame, kDim)
-    # Side-by-side display, requires both frames have same height
-    concatenatedFrames = cv.hconcat([kinectFrame, flirRemapped])
-    cv.imshow('Undistorted', concatenatedFrames)
+    # Initialize blob detector with circle parameters
+    circleDetector = CircleDetector()
+    # Initialize grid finding object with both streams simultaneously
+    gridFinder = CircleGridFinder(cameraType, streams, types, [circleDetector, circleDetector], rectImageCount)
 
-    # Waits for next frame or quits main loop if 'q' is pressed
-    if cv.waitKey(1) == ord('q'):
-        stop("User exited program.")
+    # Initial message to user
+    print("Press q to exit program.")
+
+    gridFinder.start()
+    while not gridFinder.finished:
+        # Get next frame from both cameras
+        frames = []
+        for stream in streams:
+            if stream.stopped:
+                stop("Camera disconnnected, not enough frames taken for calibration.", streams)
+            else:
+                frame = stream.read().copy()
+                gridFinder.drawOutlines([frame]) # Small performance impact, displays previously found grids as green lines
+                frames.append(frame)
+        scaleForHconcat(frames[1], frames[0], 0.75)
+        concatFrame = cv.hconcat([frames[0], frames[1]])
+        # Indicates how many images remain to take in upper left
+        cv.putText(concatFrame, 'Remaining images: ' + str(rectImageCount - gridFinder.len()), (10, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (250, 150, 0), 2)
+        # Shows frame
+        cv.imshow('Rectify', concatFrame)
+
+    # Stereo calibration in OpenCV, using keypoints identified above by gridfinder
+    # This obtains the R and T matrices to transform between 2 CAMERA POSITIONS, plus improved camera matrices and distortion coefficients
+    # Uses previous calibration parameters for instrinsics (cv.CALIB_FIX_INTRINSIC)
+    frameSize1 = frames[0, :, :, 0].shape[::-1]
+    frameSize2 = frames[1, :, :, 0].shape[::-1]
+    stereoSuccess, matrix1, dist1, matrix2, dist2, R, T, E, F = cv.stereoCalibrate( 
+        gridFinder.objectPositions, gridFinder.allImagePositions[0], gridFinder.allImagePositions[1], 
+        kMatrix, kDist, fMatrix, fDist, frameSize1, flags=cv.CALIB_FIX_INTRINSIC, criteria=criteria)
+    
+    if stereoSuccess:
+        print("Stereo calibration successful.")
+        # Alpha can be varied from 0 (no black pixels) to 1 (all pixels) in undistorted image
+        # This obtains precise R and T matrices to transforms PIXELS between images
+        R1, R2, P1, P2, Q, roi1, roi2 = cv.stereoRectify(matrix1, dist1, matrix2, dist2, frameSize1, R, T, alpha=1)
+        # Calculates maps for undistorting each image into a rectified state
+        mapX1, mapY1 = cv.initUndistortRectifyMap(matrix1, dist1, R1, P1, frameSize1, cv.CV_32FC1) #try CV_32FC2
+        mapX2, mapY2 = cv.initUndistortRectifyMap(matrix2, dist2, R2, P2, frameSize2, cv.CV_32FC1) #try CV_32FC2
+
+    # Displayed undistorted image for debugging, should be in another file!
+    while True:
+        frame1 = streams[0].read()
+        frame2 = streams[1].read()
+        # Maps pixels from FLIR to Kinect image
+        frame2Remap = cv.remap(frame2, mapX2, mapY2, cv.INTER_LINEAR)
+
+        # Scales images for display side-by-side
+        scaleForHconcat(frame2Remap, frame1, 0.75)
+
+        # Side-by-side display, requires both frames have same height
+        concatFrame = cv.hconcat([frame1, frame2Remap])
+        cv.imshow('Undistorted', concatFrame)
+
+        # Waits for next frame or quits main loop if 'q' is pressed
+        if cv.waitKey(1) == ord('q'):
+            stop("User exited program.")
+        
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', type=str, dest='cameraTypes', help='List of 2 cameras to open', required=True)
+    parser.add_argument('--calib1', type=str, dest='calibFile1', help='First file to open', required=True)
+    parser.add_argument('--calib2', type=str, dest='calibFile2', help='Second file to open', required=True)
+    args = parser.parse_args().__dict__
+    cameraType, file1, file2 = args["cameraTypes"], args["calibFile1"], args["calibFile2"]
+    #Initialise circle detector
+    now = datetime.now()
+    dt_string = now.strftime("%d-%m-%Y_%H-%M")
+    saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
+    main(cameraType, saveDirectory)

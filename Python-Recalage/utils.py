@@ -1,5 +1,8 @@
+import json
 import cv2 as cv
 import sys
+import json
+import numpy as np
 
 # Convenience function for killing open objects
 def stop(message, streams = []):
@@ -10,6 +13,16 @@ def stop(message, streams = []):
         except: 
             pass
     sys.exit(str(message))
+
+def openCalibrationFile(filename):
+    try:
+        with open(filename, 'r') as file:
+            calibrationData = json.load(file)
+            cameraMatrix = np.asarray(calibrationData['CameraMatrix'])
+            distortion = np.asarray(calibrationData['DistortionCoefficients'])
+            return cameraMatrix, distortion
+    except:
+        stop("Unable to open calibration files.")
 
 def scaleForHconcat(targetImage, referenceImage, scalingFactor = 1.0):
     # Scales images to have same height for hconcat side-by-side display

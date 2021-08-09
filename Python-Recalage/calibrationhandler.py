@@ -7,9 +7,9 @@ from numpyencoder import NumpyEncoder
 
 class CalibrationHandler:
     """Class for calculating and recalculating calibrations based on image and object points"""
-    def __init__(self, name, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError = 10):
+    def __init__(self, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError = 10):
         # Assignment
-        self.name, self.objectPositions, self.imagePositions, self.imageSize, self.minimumImages, self.maximumPointError = name, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError        
+        self.objectPositions, self.imagePositions, self.imageSize, self.minimumImages, self.maximumPointError = objectPositions, imagePositions, imageSize, minimumImages, maximumPointError        
         self.calibrationDone = False
         # Index of popped positions during calculateErrors
         self.indexesToPop = []
@@ -78,23 +78,23 @@ class CalibrationHandler:
         # Checks that error values exist to avoid crashing
         if self.calibrationDone:
             # Overall error printed to command line
-            print(self.name, "average retroprojection error :", round(self.retroprojectionError, 3))
+            print("Average retroprojection error :", round(self.retroprojectionError, 3))
 
             # side-by-side axes that cover screen
             fig, (ax1, ax2) = plt.subplots(1,2)
             fig.set_size_inches(15, 8)
             # Scatter plot of relative errors
             scatterPlot = ax1.scatter(self.xError, self.yError)
-            ax1.set_title('X and Y error for points in ' + self.name + ' calibration')
+            ax1.set_title('X and Y error for points in calibration')
             ax2.set_ylabel('Y error, pixels')
             ax2.set_xlabel('X error, pixels')
             # Intensity chart of errors based on position in image
             contourPlot = ax2.tricontourf(self.x, self.y, self.absError, 100, cmap='magma', extend='both', antialiased=False)
-            ax2.set_title('Absolute error in ' + self.name + ' image')
+            ax2.set_title('Absolute errors across image pixels')
             colorBar = fig.colorbar(contourPlot)
             colorBar.ax.set_ylabel('Absolute error')
             plt.axis('scaled')
-            plt.savefig(os.path.join(saveDirectory, 'ErrorCharts_' + self.name + '.png'))
+            plt.savefig(os.path.join(saveDirectory, 'ErrorCharts' + '.png'))
             plt.show()
     def len(self):
         return len(self.objectPositions)
@@ -108,6 +108,6 @@ class CalibrationHandler:
                 dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
                 # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
                 json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
-                print("Succesfully wrote", self.name, "calibration to file.")
+                print("Succesfully wrote calibration to file.")
         except:
             print("Failed to write to file.")

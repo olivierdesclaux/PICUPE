@@ -3,13 +3,14 @@ import numpy as np
 import cv2 as cv
 import json
 # Local modules
-from videostream import openStream
+from videostream import openStreams
 from utils import stop
 
-filename = str('CalibrationFileWebcam.json')
+filename = str('CalibrationFile.json')
 
 if len(sys.argv) > 1:
-    filename = str(sys.argv[1]) # First argv is undistort.py, second is filename
+    filename = str(sys.argv[1]) # First argv is undistort.py, second is filename, third is targetcamera
+    targetCamera = int(sys.argv[2])
 
 # Open calibration file and read contents
 with open(filename, 'r') as file:
@@ -21,7 +22,7 @@ if not distortion.any():
     stop("Cannot open complete calibration file.")
 
 # Open camera
-[videoStream] = openStream(targetCameras=[0])
+[videoStream] = openStreams(targetCameras=[targetCamera], flags =[""])
 
 # Calculate optimal cropping for distortion using 1st frame
 tempframe = videoStream.read()
