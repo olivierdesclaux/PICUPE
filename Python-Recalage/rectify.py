@@ -15,13 +15,13 @@ from circlegridfinder import CircleGridFinder
 def main(cameraTypes, calibFile1, calibFile2):
 
     # Open calibration files and read contents
-    kMatrix, kDist = openCalibrationFile(calibFile1)
-    fMatrix, fDist = openCalibrationFile(calibFile2)
+    matrix1, dist1 = openCalibrationFile(calibFile1)
+    matrix2, dist2 = openCalibrationFile(calibFile2)
 
     # If empty, quit
-    if not kDist.any():
+    if not dist1.any():
         sys.exit("Cannot read matrices from Kinect calibration file.")
-    if not fDist.any():
+    if not dist2.any():
         sys.exit("Cannot read matrices from FLIR calibration file.")
 
 
@@ -29,7 +29,7 @@ def main(cameraTypes, calibFile1, calibFile2):
         streams = openStreams(targetHeights=[720, 768])
         types = [StreamType.rgb, StreamType.ir]
     if "W" in cameraTypes and "K" in cameraTypes: # Webcam + Kinect
-        streams = openStreams(targetCameras=[0, 1])
+        streams = openStreams(targetCameras=[1, 0])
         types = [StreamType.rgb, StreamType.rgb]
     else:
         raise Exception("Invalid camera types selected.")
@@ -72,7 +72,7 @@ def main(cameraTypes, calibFile1, calibFile2):
     frameSize2 = frames[1, :, :, 0].shape[::-1]
     stereoSuccess, matrix1, dist1, matrix2, dist2, R, T, E, F = cv.stereoCalibrate( 
         gridFinder.objectPositions, gridFinder.allImagePositions[0], gridFinder.allImagePositions[1], 
-        kMatrix, kDist, fMatrix, fDist, frameSize1, flags=cv.CALIB_FIX_INTRINSIC, criteria=criteria)
+        matrix1, dist1, matrix2, dist2, frameSize1, flags=cv.CALIB_FIX_INTRINSIC, criteria=criteria)
     
     if stereoSuccess:
         print("Stereo calibration successful.")
