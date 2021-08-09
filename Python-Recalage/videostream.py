@@ -2,6 +2,7 @@ from threading import Thread, Timer
 from enum import Enum
 import cv2 as cv
 import pyk4a as k4a
+import numpy as np
 # Local modules
 from utils import stop
 
@@ -29,7 +30,6 @@ class VideoStream:
             else:
                 # Grab next frame
                 self.grabbed, self.frame = self.capture.read()
-                cv.waitKey(1)
                 # Ends thread if read() fails
                 if not self.grabbed:
                     self.stopped = True                        
@@ -48,14 +48,16 @@ class KinectVideoStream:
     def __init__(self):
             # Open Kinect with pyK4a for more options
         self.kinect = k4a.PyK4A(k4a.Config(
-                    color_format=k4a.ImageFormat.COLOR_MJPG,
                     color_resolution=k4a.ColorResolution.RES_720P,
                     depth_mode=k4a.DepthMode.NFOV_UNBINNED,
                     camera_fps=k4a.FPS.FPS_30,
                     synchronized_images_only=True,
                 ))
+
         self.kinect.start()
-        self.frame  = self.kinect.get_capture()
+        frame  = self.kinect.get_capture()
+        self.color = frame.color[:, :, :3]
+        self.depth = self._convertDepth(frame.depth)
     
         # used to indicate if the thread should be stopped or not
         self.stopped = False
@@ -70,26 +72,42 @@ class KinectVideoStream:
             else:
                 # Grab next frame
                 try:
-                    self.frame  = self.kinect.get_capture()
+                    frame  = self.kinect.get_capture()
+                    self.color = frame.color
+                    self.depth = self._convertDepth(frame.depth)
                 except:
                 # Ends thread if get_capture() fails
                     self.stopped = True                        
-    
     def read(self):
-        return self.frame
+        return [self.color, self.depth]
+
+    def readRGB(self):
+        return self.color
+
+    def readDepth(self):
+        return self.depth
 
     def stop(self):
         # Stops thread
         self.stopped = True
         self.kinect.stop()
     
+    def _convertDepth(self, frame, maxValue=4000):
+        # Clip numpy array with maxvalue for better contrast
+        clipFrame = frame.clip(0, maxValue)
+        # Convert 8U values to standard grayscale + normalize values to maximise contrast
+        return cv.normalize(clipFrame, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U) 
+
+    def colorize(self, frame, colormap=cv.COLORMAP_HSV):
+        # Apply colormap to visualize data
+        return cv.applyColorMap(frame, colormap)
+    
 class StreamType(Enum):
     rgb = 0
     ir = 1
     depth = 2
 
-def openStream(targetHeights = [], targetCameras = [], flags = []):
-    # Function to open a set of streams for a set of targetCameras/targetheights
+def openStreams(targetHeights = [], targetCameras = [], flags = []):
     # Directly opens specified camera indexes
     if len(targetCameras) != 0:
         streams = [None] * len(targetCameras)

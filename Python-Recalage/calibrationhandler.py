@@ -99,10 +99,9 @@ class CalibrationHandler:
     def len(self):
         return len(self.objectPositions)
 
-    def writeToFile(self, saveDirectory, filePrefix="CalibrationFile_"):
-
+    def writeToFile(self, saveDirectory, filePrefix="CalibrationFile"):
         try:
-            filename = os.path.join(saveDirectory, filePrefix + self.name + ".json")
+            filename = os.path.join(saveDirectory, filePrefix + ".json")
             # Outputs calibration matrices to file
             with open(filename, 'w') as file:
                 # Assigns labels to values to make JSON readable

@@ -1,17 +1,13 @@
 import sys
-
-from matplotlib.pyplot import grid
 import cv2 as cv
-import numpy as np
 import videostream
 from circledetector import CircleDetector
 from circlegridfinder import CircleGridFinder
 
 camera = cv.VideoCapture(1, cv.CAP_DSHOW)
 stream = videostream.VideoStream(camera)
+#stream = videostream.KinectVideoStream()
 fps = videostream.FPS()
-circleDetector = CircleDetector(minArea=10)
-gridFinder = CircleGridFinder([stream], ["rgb"], [circleDetector], 15)
 
 while True:
     if not stream.stopped:
