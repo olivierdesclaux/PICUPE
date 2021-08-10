@@ -11,18 +11,19 @@ class VideoStream:
         # initialize the file video stream
         self.capture = videocapture
         self.capture.set(cv.CAP_PROP_BUFFERSIZE, 2)
-        if "webcam" in flag:
+        if "W" in flag:
             self.capture.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
             self.capture.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
         # ESSENTIAL to maintain stream FPS for FLIR camera
         self.capture.set(cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self.grabbed, self.frame = self.capture.read()
-        # used to indicate if the thread should be stopped or not
+        self.grabbed, self.frame = self.capture.read() 
+
+        # Used to indicate if the thread should be stopped or not
         self.stopped = False
         # Thread used to constantly grab new frames
-        Thread(target=self.update, args=(), daemon=True).start()
+        Thread(target=self._update, args=(), daemon=True).start()
 
-    def update(self):
+    def _update(self):
         while True:
             # if the thread indicator variable is set, stop the thread
             if self.stopped:
@@ -58,7 +59,6 @@ class KinectVideoStream:
         frame  = self.kinect.get_capture()
         self.color = frame.color[:, :, :3]
         self.depth = self._convertDepth(frame.depth)
-    
         # used to indicate if the thread should be stopped or not
         self.stopped = False
         # Thread used to constantly grab new frames
@@ -107,45 +107,40 @@ class StreamType(Enum):
     ir = 1
     depth = 2
 
-def openStreams(targetHeights = [], targetCameras = [], flags = []):
+def openStream(targetCamera = None, targetHeight = None, flag = ""):
     # Directly opens specified camera indexes
-    if len(targetCameras) != 0:
-        streams = [None] * len(targetCameras)
-        for (streamIndex, cameraIndex) in enumerate(targetCameras):
-            cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
-            if cap.isOpened():
-                print("Found", cameraIndex)
-                streams[streamIndex] = VideoStream(cap, flags[streamIndex])
+    if targetCamera is not None:
+        # CAP_DSHOW is essential for FLIR framerate
+        cap = cv.VideoCapture(targetCamera, cv.CAP_DSHOW)
+        if cap.isOpened():
+            print("Found camera number", targetCamera)
+            return VideoStream(cap, flag)
+        else:
+            raise Exception("Unable to open camera number " + str(targetCamera))
 
     # Searches for cameras using height
-    elif len(targetHeights) != 0:
-        cameraIndex = 0 
-        # Array of None streams equal to number of cameras looked for
-        streams = [None] * len(targetHeights)
+    elif targetHeight is not None:
+        # Starts at first camera
+        cameraIndex = 0
         while True:
             # CAP_DSHOW is essential for FLIR framerate
             cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
+            cameraIndex += 1
 
-            # If we reach the end of available cameras
-            if not cap.isOpened():
-                break
-            else: 
-                cameraIndex += 1
+            if cap.isOpened():
                 frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
-                try:
-                    # Uses frame height to identify FLIR T1020 vs Kinect, maybe should be changed
-                    pos = targetHeights.index(frameHeight)
-                    print("Found", targetHeights[pos])
-                    streams[pos] = VideoStream(cap)
-                except:
+                if frameHeight == targetHeight:
+                    print("Found camera with height", targetHeight, "px")
+                    return VideoStream(cap, flag)
+                else:
                     # Otherwise, releases capture and moves on to next camera
                     cap.release()
-        
-    # Once streams have been searched for by index or by height, checks if they are all open
-    if None in streams:
-        raise Exception("Unable to open cameras.")
+            else: 
+            # If we reach the end of available cameras
+                raise Exception("Unable to open camera with height " + str(targetHeight) + " px")
+    # If no camera parameter specificed
     else:
-        return streams
+        raise Exception("No camera specified.")
 
 class FPS:
     def __init__(self):

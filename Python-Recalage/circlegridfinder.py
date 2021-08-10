@@ -15,7 +15,7 @@ class CircleGridFinder:
         # Array of float32 object points to add to objectPoints list
         # X axis (columns) increments 0, 1, 2, ... numberOfColumns-1, repeating numRows times
         # Y axis (rows) increments 0, 1, 2, ... numberOfRows-1
-        self.objectCorners = np.array([[2 * (x % numRows) + np.floor(x/numRows) % 2, np.floor(x / numRows), 0] for x in range(numRows * numCols)], np.float32)
+        self.objectCorners = 21.2  *np.array([[2 * (x % numRows) + np.floor(x/numRows) % 2, np.floor(x / numRows), 0] for x in range(numRows * numCols)], np.float32)
         self.numRows, self.numCols = numRows, numCols
         self.boardSize = (numRows, numCols)
         # Arrays to store object points and image points from all the images.
@@ -41,20 +41,22 @@ class CircleGridFinder:
         while self.running and len(self.objectPositions) < self.minImages:
             frames = []
             # Gets frames from image streams before processing (to ensure synchronicity)
-            for (stream, streamType) in zip(self.streams, self.streamTypes):
+            for stream in self.streams:
                 # Checks that streams are still open
                 if stream.stopped:
                     self.running = False
                     return                    
                 else:
-                    frame = stream.read()
-                    # Changes frame to single channel, either red - blue (rgb) or direct grayscale (ir)
-                    frames.append(self.grayify(frame, streamType))
-            # Checks for circles grid in each frame
-            boardsFound = True
+                    # Quickly reads frame, doing as little as possibe between different streams
+                    frames.append(stream.read())
+
             # List of grid positions in each frame of all streams
             allGridPositions = []
-            for (frame, circleDetector) in zip(frames, self.circleDetectors):
+            boardsFound = True
+            # Checks for circles grid in each frame
+            for (frame, circleDetector, streamType) in zip(frames, self.circleDetectors, self.streamTypes):
+                # Changes frame to single channel, either red - blue (rgb) or direct grayscale (ir)
+                frame = self.grayify(frame, streamType)
                 # Function searches for circleGrids using the provided circleDetector
                 # Use CALIB_CB_SYMMETRIC_GRID for grid of parallel rows and cols, CALIB_CB_CLUSTERING for quicker results
                 ret, pos = cv.findCirclesGrid(frame, self.boardSize, flags=cv.CALIB_CB_ASYMMETRIC_GRID, blobDetector=circleDetector.get())

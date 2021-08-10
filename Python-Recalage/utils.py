@@ -24,7 +24,11 @@ def openCalibrationFile(filename):
     except:
         stop("Unable to open calibration files.")
 
-def scaleForHconcat(targetImage, referenceImage, scalingFactor = 1.0):
+def calculateOptimalMatrix(frame, cameraMatrix, distortion):
+    h, w = frame.shape[:2]
+    return cv.getOptimalNewCameraMatrix(cameraMatrix, distortion, (w,h), 1, (w,h))
+
+def scaleForHconcat(referenceImage, targetImage, scalingFactor = 1.0):
     # Scales images to have same height for hconcat side-by-side display
     # Preserves aspect ratio of target
     targetRatio = targetImage.shape[1] / targetImage.shape[0]
@@ -37,4 +41,4 @@ def scaleForHconcat(targetImage, referenceImage, scalingFactor = 1.0):
     resizedTargetImage = cv.resize(targetImage, targetDim)
     resizedReferenceImage = cv.resize(referenceImage, referenceDim)
     # Returns but also modifies images in place anyways
-    return resizedTargetImage, resizedReferenceImage
+    return resizedReferenceImage, resizedTargetImage

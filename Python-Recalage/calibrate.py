@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 import os
 # Local modules
-from videostream import openStreams, StreamType
+from videostream import openStream, StreamType
 from circledetector import CircleDetector
 from calibrationhandler import CalibrationHandler
 from circlegridfinder import CircleGridFinder
@@ -26,13 +26,13 @@ def main(cameraType, saveDirectory):
     # We can identify on which port the camera is located by looking at the height of the image in different ports.
     # The FLIR in IR has a height of 768 pixels, the kinect in RGB has a height of 720 pixels.
     if "F" in cameraType: # FLIR
-        stream = openStreams(targetHeights=[768])[0]
+        stream = openStream(targetHeight =768)
         type = StreamType.ir
     elif "K" in cameraType: # Kinect
-        stream = openStreams(targetHeights=[720])[0]
+        stream = openStream(targetHeight = 720)
         type = StreamType.rgb
     elif "W" in cameraType: # Webcam
-        stream = openStreams(targetCameras=[0], flags=["webcam"])[0]
+        stream = openStream(targetCamera = 0, flag = "W")
         type = StreamType.rgb
     else:
         raise Exception("Invalid camera type selected.")
