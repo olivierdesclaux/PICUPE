@@ -21,3 +21,5 @@ Module IMU du projet PICUPE. Ce répertoire permet d'acquérir l'orientation et 
     ```
     pip install xsensdeviceapi-2021.0.0-cp37-none-win_amd64.whl
     ```
+## Utilisation
+
