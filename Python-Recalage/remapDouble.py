@@ -1,4 +1,3 @@
-import sys
 import numpy as np
 import cv2 as cv
 import argparse
@@ -9,7 +8,6 @@ from utils import stop,  openRectFile, scaleForHconcat, findingBoundingRectangle
 def main(cameras, rectFile):
     # Opens specified rect file
     matrices, dists, Rs, Ps, rois = openRectFile(rectFile)
-    mainRoi = rois[0]
     # Opens specified cameras
     streams, _ = selectStreams(cameras)
     # Gets camera sizes from first frames
@@ -22,33 +20,44 @@ def main(cameras, rectFile):
     for (matrix, dist, R, P, frameSize) in zip(matrices, dists, Rs, Ps, frameSizes):
         maps.append(cv.initUndistortRectifyMap(matrix, dist, R, P, frameSize, cv.CV_32FC1))
 
+    # Calculates cropping boxes using rectified frames
+    crops = []
+    for (stream, map) in zip(streams, maps):
+        if stream.stopped:
+            stop("Camera disconnected", streams)
+        frame = stream.read()
+        frame = cv.remap(frame, map[0], map[1], cv.INTER_LANCZOS4, borderMode=cv.BORDER_TRANSPARENT)
+        crops.append(findingBoundingRectangle(frame))
+        
     # Displayed undistorted images
     while not streams[0].stopped and not streams[1].stopped:
         remappedFrames = []
-        for (stream, map) in zip(streams, maps):
+
+        for (stream, map, crop) in zip(streams, maps, crops):
             if stream.stopped:
                 stop("Camera disconnected", streams)
             frame = stream.read()
             # Remaps frame, using a transparent border for overlay
             frame = cv.remap(frame, map[0], map[1], cv.INTER_LANCZOS4, borderMode=cv.BORDER_TRANSPARENT)
-            print(findingBoundingRectangle(frame))
-            # Crops frame using ROI
+            # Crops frame to remove unnecessary black
+            frame = frame[crop[1]:crop[1]+crop[3], crop[0]:crop[0]+crop[2]]
             remappedFrames.append(frame)
 
-        remappedFrames[0] = remappedFrames[0][mainRoi[1]:mainRoi[1]+mainRoi[3], mainRoi[0]:mainRoi[0]+mainRoi[2]]
-        cv.imshow('Kinect', remappedFrames[0])
-        #remappedFrames[1] = remappedFrames[1][roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
-        cv.imshow('FLIR', remappedFrames[1])
-
-        overlayed = cv.addWeighted(remappedFrames[0], 0.5, remappedFrames[1], 0.5, 0)
-        cv.imshow('Overlay', overlayed)
+        # Manually position thermal frame on Kinect frame using x and y differences
+        alpha = 0.5
+        xDiff = 320
+        yDiff = 150
+        crop = crops[1]
+        overlayFrame = remappedFrames[0].copy()
+        overlayFrame[yDiff:yDiff+crop[3], xDiff:xDiff+crop[2]] = alpha*overlayFrame[yDiff:yDiff+crop[3], xDiff:xDiff+crop[2]] + (1-alpha) * remappedFrames[1]
+        cv.imshow('Overlay', overlayFrame)
 
         # Scales images for display side-by-side
-        #left, right = scaleForHconcat(remappedFrames[0], remappedFrames[1], 0.7)
+        left, right = scaleForHconcat(remappedFrames[0], remappedFrames[1], 0.7)
 
         # Side-by-side display, requires both frames have same height
-        #concatFrame = cv.hconcat([left, right])
-        #cv.imshow('Remapped', concatFrame)
+        concatFrame = cv.hconcat([left, right])
+        cv.imshow('Side-by-side', concatFrame)
 
         # Waits for next frame or quits main loop if 'q' is pressed
         if cv.waitKey(1) == ord('q'):

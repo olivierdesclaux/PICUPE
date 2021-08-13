@@ -33,10 +33,10 @@ def openRectFile(filename):
         return matrices, dists, Rs, Ps, rois
 
 def findingBoundingRectangle(frame):
-    _, threshold = cv.threshold(frame, 1, 255, 0)
-    contours, _ = cv.findContours(threshold, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE)
-    cv.imshow("test",threshold)
-    return cv.boundingRect(contours)
+    grey = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+    _, thresh = cv.threshold(grey, 1, 255, cv.THRESH_BINARY)
+    nonZeroPoints = cv.findNonZero(thresh)
+    return cv.boundingRect(nonZeroPoints)
 
 def calculateOptimalMatrix(frame, cameraMatrix, distortion):
     h, w = frame.shape[:2]
