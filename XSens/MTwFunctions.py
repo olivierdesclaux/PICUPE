@@ -37,13 +37,15 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
         rejects = np.array(devIdAll)[[not elem for elem in childUsed]].tolist()
         for i in range(len(rejects)):
             index = devIdAll.index(rejects[i])
-            print("%d - " % index + "%s" % rejects[i])
+            children[index].requestBatteryLevel()
+            print("%d - " % index + "%s" % rejects[i] + " || battery percentage: " + " %d" % children[index].batteryLevel())
 
         print("Dispositifs acceptés:")
         accepted = np.array(devIdAll)[childUsed].tolist()
         for i in range(len(accepted)):
             index = devIdAll.index(accepted[i])
-            print("%d - " % index + "%s" % accepted[i])
+            children[index].requestBatteryLevel()
+            print("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % children[index].batteryLevel())
 
         option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
         change = []
@@ -52,7 +54,7 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
                 "\n Type the numbers of the sensors (csv list, e.g. 1,2,3) from which status should be changed \n (if accepted than reject or the other way around):\n")
             change = [int(i) for i in re.split(",", op2)]
             for i in range(len(change)):
-                if a[change[i]]:
+                if devIdAll[change[i]]:
                     device.rejectConnection(children[change[i]])
                     childUsed[change[i]] = False
                 else:
