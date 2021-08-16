@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 # Local modules
-from numpyencoder import NumpyEncoder
+from utils import NumpyEncoder
 
 class CalibrationHandler:
     """Class for calculating and recalculating calibrations based on image and object points"""
@@ -99,15 +99,15 @@ class CalibrationHandler:
     def len(self):
         return len(self.objectPositions)
 
-    def writeToFile(self, saveDirectory, filePrefix="CalibrationFile"):
-        try:
-            filename = os.path.join(saveDirectory, filePrefix + ".json")
-            # Outputs calibration matrices to file
-            with open(filename, 'w') as file:
-                # Assigns labels to values to make JSON readable
-                dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
-                # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
-                json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
-                print("Succesfully wrote calibration to file.")
-        except:
-            print("Failed to write to file.")
+    def writeToFile(self, saveDirectory, filePrefix="Calib"):
+         # Creates filepath for results of calibration
+        if not os.path.isdir(saveDirectory):
+            os.mkdir(saveDirectory)
+        filename = os.path.join(saveDirectory, filePrefix + ".json")
+        # Outputs calibration matrices to file
+        with open(filename, 'w') as file:
+            # Assigns labels to values to make JSON readable
+            dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
+            # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
+            json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
+            print("Succesfully wrote calibration to file.")

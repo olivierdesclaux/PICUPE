@@ -4,7 +4,7 @@ import videostream
 from circledetector import CircleDetector
 from circlegridfinder import CircleGridFinder
 
-camera = cv.VideoCapture(1, cv.CAP_DSHOW)
+camera = cv.VideoCapture(2, cv.CAP_DSHOW)
 stream = videostream.VideoStream(camera)
 #stream = videostream.KinectVideoStream()
 fps = videostream.FPS()

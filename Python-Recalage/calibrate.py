@@ -4,7 +4,7 @@ import argparse
 from datetime import datetime
 import os
 # Local modules
-from videostream import openStream, StreamType
+from videostream import selectStreams, StreamType
 from circledetector import CircleDetector
 from calibrationhandler import CalibrationHandler
 from circlegridfinder import CircleGridFinder
@@ -23,19 +23,8 @@ def main(cameraType, saveDirectory):
     # Initialize circle detector for finding circle shapes in images
     circleDetector = CircleDetector()
 
-    # We can identify on which port the camera is located by looking at the height of the image in different ports.
-    # The FLIR in IR has a height of 768 pixels, the kinect in RGB has a height of 720 pixels.
-    if "F" in cameraType: # FLIR
-        stream = openStream(targetHeight =768)
-        type = StreamType.ir
-    elif "K" in cameraType: # Kinect
-        stream = openStream(targetHeight = 720)
-        type = StreamType.rgb
-    elif "W" in cameraType: # Webcam
-        stream = openStream(targetCamera = 0, flag = "W")
-        type = StreamType.rgb
-    else:
-        raise Exception("Invalid camera type selected.")
+    # Open stream based on camera index or height, see videostream.py
+    stream, type = selectStreams(cameraType[0:1])
 
     # Initial message to user
     print("Press q to exit program.")
@@ -72,12 +61,15 @@ def main(cameraType, saveDirectory):
         # Creates Calibration object to handle cv.calibrateCamera() and error-checking
         calibration = CalibrationHandler(gridFinder.objectPositions, gridFinder.allImagePositions[0], frameSize, minCalibImages, maximumPointError)
         if calibration.calibrate():
-            # Creates filepath for results of calibration
-            if not os.path.isdir(saveDirectory):
-                os.mkdir(saveDirectory)
-            # If the calibration succeeds, display the errors, print to a file and stop taking images from this stream
+            # If the calibration succeeds
+
+            # Display matplotlib graphics of errors and saves to .png
             calibration.displayError(saveDirectory)
-            calibration.writeToFile(saveDirectory)
+            # Tries to save matrices to directory, can fail
+            try:
+                calibration.writeToFile(saveDirectory)
+            except:
+                stop("Failed to write matrices to file.", [stream])
             takeMoreImages = False
         else:
         # Otherwise, return to grid-finding loop

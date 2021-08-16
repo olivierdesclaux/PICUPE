@@ -107,14 +107,14 @@ class StreamType(Enum):
     ir = 1
     depth = 2
 
-def openStream(targetCamera = None, targetHeight = None, flag = ""):
+def openStream(targetCamera = None, targetHeight = None, flag = "", openedStreams = []):
     # Directly opens specified camera indexes
-    if targetCamera is not None:
+    if targetCamera is not None and not targetCamera in openedStreams:
         # CAP_DSHOW is essential for FLIR framerate
         cap = cv.VideoCapture(targetCamera, cv.CAP_DSHOW)
         if cap.isOpened():
             print("Found camera number", targetCamera)
-            return VideoStream(cap, flag)
+            return VideoStream(cap, flag), targetCamera
         else:
             raise Exception("Unable to open camera number " + str(targetCamera))
 
@@ -123,24 +123,58 @@ def openStream(targetCamera = None, targetHeight = None, flag = ""):
         # Starts at first camera
         cameraIndex = 0
         while True:
+            while cameraIndex in openedStreams:
+                cameraIndex += 1
             # CAP_DSHOW is essential for FLIR framerate
             cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
-            cameraIndex += 1
 
             if cap.isOpened():
                 frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
                 if frameHeight == targetHeight:
                     print("Found camera with height", targetHeight, "px")
-                    return VideoStream(cap, flag)
+                    return VideoStream(cap, flag), cameraIndex
                 else:
                     # Otherwise, releases capture and moves on to next camera
                     cap.release()
+                    cameraIndex += 1
             else: 
             # If we reach the end of available cameras
                 raise Exception("Unable to open camera with height " + str(targetHeight) + " px")
     # If no camera parameter specificed
     else:
-        raise Exception("No camera specified.")
+        raise Exception("No camera specified or camera already opened.")
+
+def selectStreams(streamLetters):
+    streams = []
+    streamIndices = []
+    types = []
+
+    # We can identify on which port the camera is located by looking at the height of the image in different ports.
+    # The FLIR in IR has a height of 768 pixels, the kinect in RGB has a height of 720 pixels.
+    # Webcam is always on port 0
+    for letter in streamLetters:
+        if letter == "K":
+            stream, streamIndex = openStream(targetHeight = 720, openedStreams=streamIndices)
+            types.append(StreamType.rgb)
+        elif letter == "F":
+            stream, streamIndex = openStream(targetHeight = 768, openedStreams=streamIndices)
+            types.append(StreamType.ir)
+        elif letter == "W":
+            stream, streamIndex = openStream(targetCamera = 0, flag = "W", openedStreams=streamIndices)
+            types.append(StreamType.rgb)
+        else:
+            for stream in streams:
+                stream.stop()
+            raise Exception("Invalid camera types selected.")
+            
+        streams.append(stream)
+        streamIndices.append(streamIndex)
+
+    # If only 1 stream is selected, do not return a list
+    if len(streams) == 1:
+        return streams[0], types[0]
+    else:
+        return streams, types
 
 class FPS:
     def __init__(self):
