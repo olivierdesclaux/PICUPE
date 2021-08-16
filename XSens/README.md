@@ -23,3 +23,16 @@ Module IMU du projet PICUPE. Ce répertoire permet d'acquérir l'orientation et 
     ```
 ## Utilisation
 
+1. Lancer le script python sur un terminal avec la commande suivante:
+    ```
+    python MTwReceiveData.py -c (Numéro de la fréquence d'acquisition) -d (Numéro du canal radio)
+    ```
+2. Par la suite, il faut attendre que les lumières LED des capteurs MTw clignotent en synchronisation avec la lumière LED de la station awinda. Pour démarrer la détection 
+des capteurs MTw, il faut appuyer *ENTER*.
+3. Confirmer la détection adéquate des capteurs MTw.
+4. Appuyer sur la touche *ENTER* pour démarrer un enregistrement des données.
+5. Appuyer sur la touche *ENTER* pour arrêter l'enregistrement des données.
+6. Appuyer sur la touche *0* pour fermer les dispositifs
+
+## Notes
+Les fichiers texte sous le dossier **MTw Pickle** contiennent toutes les paquets de données réçus par les capteurs inertiels. Le dossier **MTw data** contient les fichiers texte des capteurs qui seront insérés dans le module de Open Sense de Open Sim.
