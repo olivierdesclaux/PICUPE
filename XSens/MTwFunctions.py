@@ -141,7 +141,7 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
             "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
         for i in range(len(packetCounter[4:])):
-            file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
+            file_txt.write(str(packetCounter[i+4]) + "\t\t\t\t\t\t\t\t")
             date = timeMeasurement[i].split(' ')[0]
             temps = timeMeasurement[i].split(' ')[1]
             file_txt.write(date.split('/')[0] + "\t")
@@ -152,9 +152,9 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
             file_txt.write(temps.split(':')[1] + "\t")
             file_txt.write(temps.split(':')[2] + "\t")
 
-            matrix = orientationMatrix[i].reshape(9, )
+            matrix = orientationMatrix[i+4].reshape(9, )
             for k in range(3):
-                file_txt.write('{:.6f}'.format(round(acceleration[i][k], 6)) + "\t")
+                file_txt.write('{:.6f}'.format(round(acceleration[i+4][k], 6)) + "\t")
             for j in range(9):
                 file_txt.write('{:.6f}'.format(round(matrix[j], 6)) + "\t")
             file_txt.write("\n")
