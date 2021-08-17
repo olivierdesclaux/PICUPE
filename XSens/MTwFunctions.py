@@ -8,6 +8,45 @@ import time
 import pickle
 
 
+class MTwIdentifier:
+    def __init__(self, ID):
+        self.ID = ID
+        if ID == '00B48784':
+            self.label = 'HAND_L'
+        elif ID == '00B487B6':
+            self.label = 'fARM_L'
+        elif ID == '00B48760':
+            self.label = 'SHOU'
+        elif ID == '00B48761':
+            self.label = 'FOOT'
+        elif ID == '00B4876D':
+            self.label = 'fARM_R'
+        elif ID == '00B4875D':
+            self.label = 'HAND_R'
+        elif ID == '00B48772':
+            self.label = 'PELV'
+        elif ID == '00B487B7':
+            self.label = 'PROP 1'
+        elif ID == '00B4876F':
+            self.label = 'uLEG_R'
+        elif ID == '00B4875C':
+            self.label = 'uARM_L'
+        elif ID == '00B48770':
+            self.label = 'uARM_R'
+        elif ID == '00B4875B':
+            self.label = 'STERN'
+        elif ID == '00B48773':
+            self.label = 'uLEG_L'
+        elif ID == '00B48769':
+            self.label = 'LLEG_L'
+        elif ID == '00B4876C':
+            self.label = 'LLEG_R'
+        elif ID == '00B48768':
+            self.label = 'FOOT_L'
+        elif ID == '00B48765':
+            self.label = 'HEAD'
+        elif ID == '00B4876E':
+            self.label = 'SHOU_L'
 
 
 def stopAll(device, control, Ports):
@@ -33,18 +72,21 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
             if children[i].connectivityState() == xda.XCS_Wireless:
                 childUsed[i] = True
 
-        print("Dispositifs rejetés:")
+        print("\n Dispositifs rejetés:")
         rejects = np.array(devIdAll)[[not elem for elem in childUsed]].tolist()
         for i in range(len(rejects)):
             index = devIdAll.index(rejects[i])
+            # MTw = MTwIdentifier(rejects[i].toXsString().__str__())
             children[index].requestBatteryLevel()
+            time.sleep(0.1)
             print("%d - " % index + "%s" % rejects[i] + " || battery percentage: " + " %d" % children[index].batteryLevel())
 
-        print("Dispositifs acceptés:")
+        print("\n Dispositifs acceptés:")
         accepted = np.array(devIdAll)[childUsed].tolist()
         for i in range(len(accepted)):
             index = devIdAll.index(accepted[i])
             children[index].requestBatteryLevel()
+            time.sleep(0.1)
             print("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % children[index].batteryLevel())
 
         option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
@@ -92,7 +134,7 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
         file_txt.write(
             "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day UTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
-        for i in range(len(dataPackets)):
+        for i in range(4, len(dataPackets)):
             file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t\t\t\t\t\t\t")
             matrix = orientationMatrix[i].reshape(9, )
             for k in range(3):
@@ -102,4 +144,4 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
             file_txt.write("\n")
         file_txt.close()
 
-        print(devIdAll[n], "number of data packets: ", len(packetCounter))
+        print(devIdAll[n], "number of data packets: ", len(packetCounter[4:]))

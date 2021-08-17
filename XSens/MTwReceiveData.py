@@ -10,6 +10,7 @@ from threading import Lock
 # Local modules
 from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
 
+
 # Création d'un Handle pour la lecture des packets des MTw
 class MTwCallback(xda.XsCallback):
     def __init__(self, max_buffer_size = 5):
@@ -46,7 +47,8 @@ class MTwCallback(xda.XsCallback):
         with open(filename, "ab") as file_handle:
             pickle.dump((oldest_packet.packetCounter(), oldest_packet.calibratedAcceleration(),
                          oldest_packet.orientationMatrix(),
-                         oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__()),
+                         oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__(),
+                         oldest_packet.utcTime().currentLocalTime().__str__()),
                         (file_handle))
         self.m_lock.release()
 
@@ -57,6 +59,7 @@ def key_capture_thread():
     input("Press enter to stop recording.")
     keep_going = False
 
+## Main function ##
 def main(updateRate, radioChannel):
     global keep_going
     try:
@@ -182,10 +185,8 @@ def main(updateRate, radioChannel):
         keep_going = True
         th.Thread(target=key_capture_thread, args=(), name='key_capture_thread', daemon=True).start()
 
-
         while keep_going:
             for i in range(len(mtwCallbacks)):
-                # devicesUsed[i].flushInputBuffers()
                 callback = mtwCallbacks[i]
                 filenamePCKL = filenamesPCKL[i]
 
@@ -193,7 +194,8 @@ def main(updateRate, radioChannel):
                     callback.writeData(filenamePCKL)
 
         startEnd = xda.XsTimeStamp_nowMs() - startTime
-        print("Time end (s): ", startEnd / 1000, "\n")
+        print("Time of recording (s): ", startEnd / 1000, "\n")
+        print("Number of packets that should be acquire by each MTw:", round(updateRate*startEnd / 1000))
         #####
 
         pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenamesPCKL, updateRate)
@@ -210,8 +212,8 @@ def main(updateRate, radioChannel):
         if not awinda.closeLogFile():
             raise RuntimeError("Failed to close log file. Aborting.")
 
-        exit = int(input('\n Appuyez sur la touche 0 pour quitter le mode acquisition... \n'))
-        if exit == 0:
+        exit_program = int(input('\n Appuyez sur la touche 0 pour quitter le mode acquisition... \n'))
+        if exit_program == 0:
             stopAll(awinda, controlDev, Ports)
 
 
@@ -226,11 +228,14 @@ def main(updateRate, radioChannel):
     else:
         print("Successful exit.")
 
+####
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', type=int, dest='updateRate', help='Select an update rate (40 - 120) Hz', required=True)
-    parser.add_argument('-d', type=int, dest='radioChannel', help='Select a radio Channel between 11 to 25', required=True)
+    parser.add_argument('-c', type=int, dest='updateRate', default=40, help='Select an update rate (40 - 120) Hz',
+                        required=True)
+    parser.add_argument('-d', type=int, dest='radioChannel', default=11, help='Select a radio Channel between 11 to 25',
+                        required=True)
     args = parser.parse_args().__dict__
 
     updateRate = args['updateRate']
