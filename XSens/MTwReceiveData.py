@@ -47,8 +47,7 @@ class MTwCallback(xda.XsCallback):
         with open(filename, "ab") as file_handle:
             pickle.dump((oldest_packet.packetCounter(), oldest_packet.calibratedAcceleration(),
                          oldest_packet.orientationMatrix(),
-                         oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__(),
-                         oldest_packet.utcTime().currentLocalTime().__str__()),
+                         oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__()),
                         (file_handle))
         self.m_lock.release()
 
