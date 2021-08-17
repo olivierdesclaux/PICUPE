@@ -8,7 +8,7 @@ import pickle
 import argparse
 from threading import Lock
 # Local modules
-from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
+from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt, timeOfArrival2timeMeasurement
 
 
 # Création d'un Handle pour la lecture des packets des MTw

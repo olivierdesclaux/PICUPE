@@ -1,3 +1,5 @@
+import datetime
+
 import numpy as np
 import xsensdeviceapi as xda
 import sys
@@ -6,6 +8,7 @@ import threading as th
 import os
 import time
 import pickle
+import datetime
 
 
 class MTwIdentifier:
@@ -125,6 +128,9 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
         packetCounter = [item[0] for item in dataPackets]
         acceleration = [item[1] for item in dataPackets]
         orientationMatrix = [item[2] for item in dataPackets]
+        timeOfArrival = [item[3] for item in dataPackets]
+        timeMeasurement = timeOfArrival2timeMeasurement(timeOfArrival, updateRate)
+
         filepath = os.path.join(f_path, filename)
         file_txt = open(filepath, "w")
         file_txt.write("// Start Time: Unknown: \n")
@@ -132,10 +138,20 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
         file_txt.write("// Filter Profile: human (46.1) \n")
         file_txt.write("// Firmware Version: " + str(firmware_version.toXsString()) + "\n")
         file_txt.write(
-            "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day UTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
+            "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
-        for i in range(4, len(dataPackets)):
-            file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t\t\t\t\t\t\t")
+        for i in range(len(packetCounter[4:])):
+            file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
+            date = timeMeasurement[i].split(' ')[0]
+            temps = timeMeasurement[i].split(' ')[1]
+            file_txt.write(date.split('/')[0] + "\t")
+            file_txt.write(date.split('/')[1] + "\t")
+            file_txt.write(date.split('/')[2] + "\t")
+
+            file_txt.write(temps.split(':')[0] + "\t")
+            file_txt.write(temps.split(':')[1] + "\t")
+            file_txt.write(temps.split(':')[2] + "\t")
+
             matrix = orientationMatrix[i].reshape(9, )
             for k in range(3):
                 file_txt.write('{:.6f}'.format(round(acceleration[i][k], 6)) + "\t")
@@ -145,3 +161,28 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
         file_txt.close()
 
         print(devIdAll[n], "number of data packets: ", len(packetCounter[4:]))
+
+def timeOfArrival2timeMeasurement(timeOfArrival, updateRate):
+    t0 = time.strptime(timeOfArrival[4][11:-1].split('.')[0],'%H:%M:%S')
+    t0_s = datetime.timedelta(hours=t0.tm_hour, minutes=t0.tm_min, seconds=t0.tm_sec).total_seconds()
+    t0_ms = int(timeOfArrival[4][11:].split('.')[1])/1000
+
+    t = time.strptime(timeOfArrival[-1][11:-1].split('.')[0],'%H:%M:%S')
+    t_s = datetime.timedelta(hours=t0.tm_hour, minutes=t0.tm_min, seconds=t0.tm_sec).total_seconds()
+    t_ms = int(timeOfArrival[-1][11:].split('.')[1])/1000
+
+    delta_t_dot = round((t_s + t_ms)-(t0_s + t0_ms), 3)
+    delta = round(np.abs(delta_t_dot - len(timeOfArrival[4:])/updateRate), 3)
+
+    timeMeasurement = []
+    temps_init = t0_s + t0_ms - delta
+    for n in range(len(timeOfArrival[4:])):
+        seconds = round(temps_init + n/60, 3)
+        m_s = round(seconds%1, 3)
+        ty_res = time.gmtime(seconds)
+        temps = time.strftime("%H:%M:%S", ty_res)
+        temps = temps + str(m_s)[1:]
+        timeMeasurement.append(timeOfArrival[n].split(' ')[0] + ' ' + temps)
+
+    return timeMeasurement
+
