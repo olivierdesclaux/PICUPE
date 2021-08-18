@@ -1,31 +1,42 @@
 import sys
 import cv2 as cv
 import videostream
-from circledetector import CircleDetector
-from circlegridfinder import CircleGridFinder
+from utils import scaleForHconcat
 
-camera = cv.VideoCapture(2, cv.CAP_DSHOW)
-stream = videostream.VideoStream(camera)
+cameras = 'K'
+streams, _ = videostream.selectStreams(cameras)
+
+n = len(cameras)
+if n ==1:
+    streams = [streams]
 #stream = videostream.KinectVideoStream()
-fps = videostream.FPS()
+# fps = videostream.FPS()
 
 while True:
-    if not stream.stopped:
-        frame = stream.read()
-        cv.putText(frame, str(fps.fps), (20, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (20, 20, 250), 2)
+    if not(True in [stream.stopped for stream in streams]):
+        frames = []
+        for stream in streams:
+            # print(stream.stopped)
+            if stream.stopped:
+                videostream.stop("Camera disconnected", streams)
+            frame = stream.read()
+            frames.append(frame)
+            # Scales images for display side-by-side
 
-        cv.imshow('frame', frame)
-        
-        fps.frames += 1
+        if n == 2:
+            left, right = scaleForHconcat(frames[0], frames[1], 0.7)
 
-        ## Waits for next frame or quits main loop if 'q' is pressed
+            # Side-by-side display, requires both frames have same height
+            concatFrame = cv.hconcat([left, right])
+            cv.imshow('Side-by-side', concatFrame)
+        elif n == 1:
+            cv.imshow("Camera Test", frames[0])
+        # Waits for next frame or quits main loop if 'q' is pressed
         if cv.waitKey(1) == ord('q'):
-            stream.stop()
-            cv.destroyAllWindows()
-            fps.stop()
-            sys.exit("User exited program.")
-    else:
-        fps.stop()
-        cv.destroyAllWindows()
-        sys.exit("Camera disconnected")
+            videostream.stop("User exited program.", streams)
+
+# videostream.stop("Camera disconnected", streams)
+
+
+
 
