@@ -8,7 +8,8 @@ import pickle
 import argparse
 from threading import Lock
 # Local modules
-from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
+from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt, timeOfArrival2timeMeasurement
+
 
 # Création d'un Handle pour la lecture des packets des MTw
 class MTwCallback(xda.XsCallback):
@@ -45,7 +46,8 @@ class MTwCallback(xda.XsCallback):
         oldest_packet = xda.XsDataPacket(self.m_packetBuffer.pop(0))
         with open(filename, "ab") as file_handle:
             pickle.dump((oldest_packet.packetCounter(), oldest_packet.calibratedAcceleration(),
-                         oldest_packet.orientationMatrix(), oldest_packet.timeOfArrival().toXsString().__str__()),
+                         oldest_packet.orientationMatrix(),
+                         oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__()),
                         (file_handle))
         self.m_lock.release()
 
@@ -56,6 +58,7 @@ def key_capture_thread():
     input("Press enter to stop recording.")
     keep_going = False
 
+## Main function ##
 def main(updateRate, radioChannel):
     global keep_going
     try:
@@ -98,6 +101,7 @@ def main(updateRate, radioChannel):
         assert (awinda is not 0)
         print("Dispositif: %s, avec ID: %s ouvert. \n" % (awinda.productCode(), awinda.deviceId().toXsString()))
 
+
         # Mettre le dispositif en mode configuration
         print("Dispositif en mode configuration...\n")
         if not awinda.gotoConfig():
@@ -113,17 +117,6 @@ def main(updateRate, radioChannel):
             print("Created a log file: %s" % logFileName)
 
         # Acquisition des fréquences pour la mise à jour des données
-        #supportedUpdateRates = awinda.supportedUpdateRates(xda.XDI_None)
-        indexRate = []
-
-        #while indexRate == []:
-            #print("Les fréquences disponibles sont:")
-            #print('\n'.join('{}: {}'.format(*k) for k in enumerate(supportedUpdateRates)))
-            #choix_fq = input("Veuillez choisir une fréquence d'acquisition: ")
-            #if choix_fq == []:
-                #continue
-            #indexRate = supportedUpdateRates.index(int(choix_fq))
-        #updateRate = supportedUpdateRates[indexRate]
         print("Fréquence d'acquisition choisi: ", updateRate, "\n")
 
         # Mise à jour de la fréquence d'acquisition
@@ -131,18 +124,8 @@ def main(updateRate, radioChannel):
             raise RuntimeError("Échec de la mise à jour du update rate.")
 
         # Acquisition du canal radio
-        #radioChannels = [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]
-        #indexRadio = []
-
-        #while indexRadio == []:
-            #print("Les canaux disponibles sont: ")
-            #print('\n'.join('{}: {}'.format(*k) for k in enumerate(radioChannels)))
-            #choix_radio = input("Veuillez choisir un canal de radio: ")
-            #if choix_radio == []:
-                #continue
-            #indexRadio = radioChannels.index(int(choix_radio))
         print("Canal de radio choisi: ", radioChannel, "\n")
-        #radioChannel = radioChannels[indexRadio]
+
         # Mise à jour du canal radio
         try:
             awinda.enableRadio(radioChannel)
@@ -165,12 +148,16 @@ def main(updateRate, radioChannel):
 
         devicesUsed, devIdUsed, nDevs = checkConnectedSensors(devIdAll, MTws, controlDev, awinda, Ports)
 
+
         MTw_pickle = os.path.dirname(os.path.realpath("__file__")) + "\\MTw Pickle"
 
+        # Set UTC on MTWs
         for n in range(nDevs):
             filePCKL = "PCKL_" + str(devId.toXsString()) + "_" + str(devIdUsed[n]) + ".txt"
             filenamesPCKL.append(os.path.join(MTw_pickle, filePCKL))
             open(filenamesPCKL[-1], 'wb')
+            devicesUsed[n].setUtcTime(xda.XsTimeInfo().currentLocalTime())
+
         ##################
 
         # Mis les capteurs MTw en mode acquisition des données
@@ -180,17 +167,17 @@ def main(updateRate, radioChannel):
             raise RuntimeError("Could not put device into measurement mode. Aborting.")
 #
 
-        print("Wait 15 seconds before starting data acquisition.\n")
+        print("Wait 10 seconds before starting data acquisition.\n")
         time.sleep(10)
 
         for n in range(nDevs):
-            if not MTws[n].resetOrientation(xda.XRM_Heading + xda.XRM_Alignment):
+            if not devicesUsed[n].resetOrientation(xda.XRM_Heading + xda.XRM_Alignment):
                 print("Could not reset the header.")
 
         input("Press enter to start recording...\n")
-        print("Starting recording...")
+        print("Starting recording...\n")
 
-        if not MTws[0].startRecording():
+        if not awinda.startRecording():
             raise RuntimeError("Failed to start recording. Aborting.")
 
         startTime = xda.XsTimeStamp_nowMs()
@@ -206,7 +193,8 @@ def main(updateRate, radioChannel):
                     callback.writeData(filenamePCKL)
 
         startEnd = xda.XsTimeStamp_nowMs() - startTime
-        print("Time end (s): ", startEnd / 1000, "\n")
+        print("Time of recording (s): ", startEnd / 1000, "\n")
+        print("Number of packets that should be acquire by each MTw:", round(updateRate*startEnd / 1000))
         #####
 
         pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenamesPCKL, updateRate)
@@ -223,8 +211,8 @@ def main(updateRate, radioChannel):
         if not awinda.closeLogFile():
             raise RuntimeError("Failed to close log file. Aborting.")
 
-        exit = int(input('\n Appuyez sur la touche 0 pour quitter le mode acquisition... \n'))
-        if exit == 0:
+        exit_program = int(input('\n Appuyez sur la touche 0 pour quitter le mode acquisition... \n'))
+        if exit_program == 0:
             stopAll(awinda, controlDev, Ports)
 
 
@@ -239,11 +227,14 @@ def main(updateRate, radioChannel):
     else:
         print("Successful exit.")
 
+####
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', type=int, dest='updateRate', help='Select an update rate (40 - 120) Hz', required=True)
-    parser.add_argument('-d', type=int, dest='radioChannel', help='Select a radio Channel between 11 to 25', required=True)
+    parser.add_argument('-c', type=int, dest='updateRate', default=40, help='Select an update rate (40 - 120) Hz',
+                        required=True)
+    parser.add_argument('-d', type=int, dest='radioChannel', default=11, help='Select a radio Channel between 11 to 25',
+                        required=True)
     args = parser.parse_args().__dict__
 
     updateRate = args['updateRate']
