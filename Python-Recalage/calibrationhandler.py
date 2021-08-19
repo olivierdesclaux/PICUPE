@@ -233,12 +233,5 @@ class CalibrationHandler:
 
     def len(self):
         """ Returns length of objectPositions, aka number of grids remaining
-
-        Convenience function
-
-        Returns
-        -------
-        length : int
-            Number of objectPositions remaining
         """
         return len(self.objectPositions)
