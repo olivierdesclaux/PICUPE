@@ -9,42 +9,55 @@ from calibrationhandler import CalibrationHandler
 from circlegridfinder import CircleGridFinder
 from utils import stop
 
-def main(cameraType, saveDirectory):
+def main(cameraType, saveDirectory, initialNumGrids = 30, minNumGrids = 25, 
+         maxPointError = 3, rows = 9, cols = 15):
     """Calibrate.py obtains intrinsic camera parameters using a grid pattern 
+
+    Script asks user to present an asymmetric circle grid to the camera 
+    in initialCalibImage positions. Grid should be tilted in every capture,
+    not parallel to camera plane. Previously identified grids are shown 
+    on screen in green. Grids should cover the entire camera FoV. 
+
     Parameters
     ----------
-    cameraType : string
-        First character indicates type of camera that is to be calibrated
+    cameraType : {'K', 'F', 'W'}
+        Indicates type of camera that is to be calibrated
+        K = Kinect, F = Flir, W = Webcam
     saveDirectory : string
         Directory in which to save the calibration matrices and error image
+    initialNumGrids : int
+        Number of grid images to obtain  before attempting calibration
+    minNumGrids : int
+        Minimum number of grid images in an accepted calibration
+        Must be < initialNumGrids or will never complete
+    maxPointError : float/int
+        Maximum error to tolerate on each point during calibration, in pixels
+        Beyond this, entire grid is rejected as outlier
+    rows, cols : int
+        Dimensions of circle grid used to calibrate
     """
-    # Global calibration parameters
-    # Maximum number of checkerboard images to obtain
-    initialCalibImages = 30
-    # Minimum number of checkerboard images to calculate matrices from,
-    # after removing outliers
-    minCalibImages = 27
-    # Maximum error to tolerate on each point during calibration, in pixels
-    # Beyond this, entire grid is rejected as outlier
-    maximumPointError = 3
     # Initialize circle detector for finding circle shapes in images
     circleDetector = CircleDetector()
-    # Open stream based on camera index or height, see videostream.py
-    stream, type = selectStreams(cameraType[0:1])
+    # Open stream based on cameraType
+    try:
+        stream, type = selectStreams(cameraType[0:1])
+    # Invalid camera types
+    except LookupError as err:
+        stop(err)
     # Creates object that continually finds circle grids in images
     gridFinder = CircleGridFinder(cameraType, [stream], [type], 
-        [circleDetector], initialCalibImages)
+        [circleDetector], initialNumGrids, numRows=rows, numCols=cols)
 
     # Initial message to user
     print("Press q to exit program.")
     print("Taking grid pictures...")
 
     # Main capture and calibrate loop
-    # This section asks the user to find initialCalibImages grids
-    takeMoreImages = True
-    while takeMoreImages:
+    # This section asks the user to find initialNumGrids grids
+    while True:
         gridFinder.start()
         # Repeats until enough images found in this stream
+        # This loop displays the GUI to the users
         while not gridFinder.finished:
             # Checks that the stream is still open
             if stream.stopped:
@@ -59,7 +72,7 @@ def main(cameraType, saveDirectory):
                 gridFinder.drawOutlines([frame]) 
                 # Indicates how many images remain to take in upper left
                 cv.putText(frame, 'Remaining images: ' 
-                    + str(initialCalibImages - gridFinder.len()), 
+                    + str(initialNumGrids - gridFinder.len()), 
                     (10, 50), cv.FONT_HERSHEY_SIMPLEX, 1, (250, 150, 0), 2)
                 # Shows frame
                 cv.imshow('Calibration', frame)
@@ -74,7 +87,7 @@ def main(cameraType, saveDirectory):
         # and error-checking
         calibration = CalibrationHandler(gridFinder.objectPositions,
             gridFinder.allImagePositions[0], frameSize, 
-            minCalibImages, maximumPointError)
+            minNumGrids, maxPointError)
         # If the calibration succeeds
         if calibration.calibrate():
             # Display matplotlib graphics of errors and saves to .png
@@ -85,7 +98,8 @@ def main(cameraType, saveDirectory):
                 calibration.writeToFile(saveDirectory)
             except:
                 stop("Failed to write matrices to file.", [stream])
-            takeMoreImages = False
+            # Break out of grid-finding loop
+            break
         else:
         # Otherwise, return to grid-finding loop
             print(gridFinder.name + " calibration failed, needs more images.")
