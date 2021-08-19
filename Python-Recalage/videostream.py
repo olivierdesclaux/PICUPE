@@ -165,7 +165,7 @@ def selectStreams(streamLetters):
         else:
             for stream in streams:
                 stream.stop()
-            raise Exception("Invalid camera types selected.")
+            raise LookupError("Invalid camera types selected.")
             
         streams.append(stream)
         streamIndices.append(streamIndex)

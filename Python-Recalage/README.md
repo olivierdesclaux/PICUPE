@@ -31,15 +31,21 @@ Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.p
 
 ## Utilisation
 
+### Calibrage
 La calibration fonctionne avec une grille de cercles peinte en rouge ou orange.
 Cette grille peut être obtenue en découpant au laser du bois avec le fichier Grille.svg.
-Pour calibrer une caméra, simplement activer l'environnement et effectuer :
+Pour calibrer une caméra, activer l'environnement, brancher la caméra voulue et effectuer :
 ```
-python calibrate.py
+python calibrate.py -c CAMERA
 ```
+Paramètres :
+-c : Type de caméra. Accepte K/Kinect, F/FLIR ou W/Webcam
+
 Ensuite, déplacer la grile afin de couvrir toute l'image de la caméra de quadrilatères verts.
+Il est également important de varier la distance entre la grille et la caméra (captures plus proches et plus lointaines).
 Lorsque le compte d'image à prendre atteint 0, le logiciel peut demander de prendre des captures à nouveau.
-Ceci signifie qu'il a rejeté des captures trop floues/imprécises, et il faut simplement en prendre davantage.
+Ceci signifie qu'il a rejeté des captures trop floues/imprécises, et il faut prendre de nouvelles captures.
+
 Les recommendations suivantes sont à suivre pour un calibrage optimal : (tirés de [ce lien](https://stackoverflow.com/questions/12794876/how-to-verify-the-correctness-of-calibration-of-a-webcam/12821056#12821056)):
 1. Avoir un bon éclairage
 2. Bien fixer la caméra
@@ -48,10 +54,24 @@ Les recommendations suivantes sont à suivre pour un calibrage optimal : (tirés
 5. Éviter le motion blur dans les images
 6. S'assurer que le checkerboard est le plus rigide possible
 
-Le calibrage est stocké dans le fichier `calibrationFile.json`.
+Le calibrage est stocké dans le fichier `Results/CAMERA_Date/Calib.json`.
 
-Une fois le calibrage effectué, utiliser la commande suivante pour appliquer le calibrage à la caméra actuelle :
+### Recalage
+Le recalage permet de déformer deux images pour en faire correspondre les pixels.
+Il fonctionne aussi avec une grille de cercles peinte en orange.
+Pour recaler deux caméras branchées à l'ordinateur, effectuer :
 ```
-python undistort.py [filename]
+python rectify.py -c CAMERAS --calibL CALIBRATION1.json --calibR CALIBRATION2.json
 ```
-Par défaut, le nom de fichier utilisé est `calibrationFile.json`, mais un autre fichier de même format peut y être substitué.
+Paramètres :
+-c : Types de caméra, dans l'ordre, 1 lettre chacune. Accepte K (Kinect), F (FLIR) ou W (Webcam). Exemple : KF (Kinect + FLIR)
+--calibL : Fichier de calibrage de la première caméra
+--calibR : Fichier de calibrage de la seconde caméra
+
+Ensuite, il faut déplacer la grille de calibrage pour couvrir le plus possible le volume observé par les caméras.
+La grille n'est acceptée que si elle est vue dans les deux caméras simultanément.
+Les recommandations qui s'applique au calibrage s'appliquent également au recalage.
+
+Le recalage est stocké dans le fichier `Results/CAMERAS_Date/RectifyCAMERAS.json`
+
+
