@@ -8,12 +8,12 @@ import pickle
 import argparse
 from threading import Lock
 # Local modules
-from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt, timeOfArrival2timeMeasurement
+from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
 
 
 # Création d'un Handle pour la lecture des packets des MTw
 class MTwCallback(xda.XsCallback):
-    def __init__(self, max_buffer_size = 5):
+    def __init__(self, max_buffer_size = 15):
         xda.XsCallback.__init__(self)
         self.m_maxNumberOfPacketsInBuffer = max_buffer_size
         self.m_packetBuffer = list()
@@ -184,6 +184,9 @@ def main(updateRate, radioChannel):
         keep_going = True
         th.Thread(target=key_capture_thread, args=(), name='key_capture_thread', daemon=True).start()
 
+        awinda.flushInputBuffers()
+        for n in range(nDevs):
+            devicesUsed[n].flushInputBuffers()
         while keep_going:
             for i in range(len(mtwCallbacks)):
                 callback = mtwCallbacks[i]
@@ -231,9 +234,9 @@ def main(updateRate, radioChannel):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('-c', type=int, dest='updateRate', default=40, help='Select an update rate (40 - 120) Hz',
+    parser.add_argument('-rate', type=int, dest='updateRate', default=40, help='Select an update rate (40 - 120) Hz',
                         required=True)
-    parser.add_argument('-d', type=int, dest='radioChannel', default=11, help='Select a radio Channel between 11 to 25',
+    parser.add_argument('-radio', type=int, dest='radioChannel', default=11, help='Select a radio Channel between 11 to 25',
                         required=True)
     args = parser.parse_args().__dict__
 
