@@ -116,6 +116,24 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
 
 def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, updateRate):
     f_path = os.path.dirname(os.path.realpath("__file__")) + "\\MTw data"
+    nPacketsDevs = []
+    nPacketInitial = []
+    for n in range(nDevs):
+        dataPackets = []
+        filename = "MT_" + str(devId.toXsString()) + "_" + str(devIdUsed[n]) + ".txt"
+        with (open(filenames[n], 'rb')) as openfile:
+            while True:
+                try:
+                    dataPackets.append(pickle.load(openfile))
+                except EOFError:
+                    break
+        packetCounter = [item[0] for item in dataPackets][4:]
+        nPackets = packetCounter[-1] - packetCounter[0] + 1
+        nPacketsDevs.append(nPackets)
+        nPacketInitial.append(packetCounter[0])
+    nPacketsRef = int(np.median(nPacketsDevs))
+    nPacketInitialRef = int(np.median(nPacketsDevs))
+
     for n in range(nDevs):
         dataPackets = []
         filename = "MT_" + str(devId.toXsString()) + "_" + str(devIdUsed[n]) + ".txt"
@@ -131,14 +149,32 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
         # timeOfArrival = [item[3] for item in dataPackets]
         # timeMeasurement = timeOfArrival2timeMeasurement(timeOfArrival, updateRate)
         numberPackets = len(packetCounter)
-        packetCounter = removeResetCounter(packetCounter)
+        packetCounter = removeResetCounter_v2(packetCounter)
         ref = [x for x in range(packetCounter[0], packetCounter[-1] + 1)
                if x not in packetCounter]
 
         if ref:
             packetCounter, acceleration, orientationMatrix = interPolateData(packetCounter, acceleration, orientationMatrix)
 
-        packetsMissing = len(packetCounter) - numberPackets
+        if packetCounter[0] > nPacketInitialRef:
+            packetCounter.insert(0, packetCounter[0] - 1)
+            acceleration.insert(0, acceleration[0])
+            orientationMatrix.insert(0, orientationMatrix[0])
+        elif packetCounter[0] < nPacketInitialRef:
+            packetCounter.pop(0)
+            acceleration.pop(0)
+            orientationMatrix.pop(0)
+
+        if len(packetCounter) < nPacketsRef:
+            packetCounter.append(packetCounter[-1]+1)
+            acceleration.append(acceleration[-1])
+            orientationMatrix.append(orientationMatrix[-1])
+        elif len(packetCounter) > nPacketsRef:
+            packetCounter.pop()
+            acceleration.pop()
+            orientationMatrix.pop()
+        packetsMissing = abs(len(packetCounter) - numberPackets)
+
         filepath = os.path.join(f_path, filename)
         file_txt = open(filepath, "w")
         file_txt.write("// Start Time: Unknown: \n")
@@ -204,6 +240,18 @@ def removeResetCounter(PacketCounter, maxWrap = 65535):
 
     return PacketCounter
 
+def removeResetCounter_v2(PacketCounter, maxWrap = 65535):
+    index = []
+    for i in range(len(PacketCounter)):
+        if PacketCounter[i]//10 == 0 and PacketCounter[i-1]//10 != 0:
+            index.append(i)
+
+    if index:
+        for n in index:
+            for i in range(n, len(PacketCounter)):
+                PacketCounter[i] = PacketCounter[i] + maxWrap + 1
+    return PacketCounter
+
 def interPolateData(PacketCounter, acceleration, orientationMatrix):
     i = 0
     while True:
@@ -215,7 +263,7 @@ def interPolateData(PacketCounter, acceleration, orientationMatrix):
             orientationMatrix.insert(i+1, orientation)
         i += 1
 
-        if PacketCounter[-1] - PacketCounter[i] == 1
+        if PacketCounter[-1] - PacketCounter[i] == 1:
             break
 
     return PacketCounter, acceleration, orientationMatrix

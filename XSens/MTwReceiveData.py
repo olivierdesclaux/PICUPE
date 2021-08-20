@@ -53,10 +53,17 @@ class MTwCallback(xda.XsCallback):
 
 
 ## Thread to stop recording loop ##
-def key_capture_thread():
+def key_capture_thread(awinda):
     global keep_going
-    input("Press enter to stop recording... ")
+    input("Press enter to stop recording... \n")
     keep_going = False
+    print("Abort flushing operation...")
+    if not awinda.abortFlushing():
+        print("Failed to abort flushing operation.")
+    print("Stopping recording...\n")
+    if not awinda.stopRecording():
+        print("Failed to stop recording. Aborting.")
+
 
 ## Main function ##
 def main(updateRate, radioChannel):
@@ -173,18 +180,15 @@ def main(updateRate, radioChannel):
         for n in range(nDevs):
             if not devicesUsed[n].resetOrientation(xda.XRM_Heading + xda.XRM_Alignment):
                 print("Could not reset the header.")
-
+        keep_going = True
         input("Press enter to start recording...\n")
-        print("Starting recording...\n")
 
+        th.Thread(target=key_capture_thread, args=(awinda,), name='key_capture_thread', daemon=True).start()
+        print("Starting recording...\n")
         if not awinda.startRecording():
             raise RuntimeError("Failed to start recording. Aborting.")
-
         startTime = xda.XsTimeStamp_nowMs()
-        keep_going = True
-        th.Thread(target=key_capture_thread, args=(), name='key_capture_thread', daemon=True).start()
 
-        awinda.flushInputBuffers()
         for n in range(nDevs):
             devicesUsed[n].flushInputBuffers()
         while keep_going:
@@ -197,18 +201,10 @@ def main(updateRate, radioChannel):
 
         startEnd = xda.XsTimeStamp_nowMs() - startTime
         print("Time of recording (s): ", startEnd / 1000, "\n")
-        print("Number of packets that should be acquire by each MTw:", round(updateRate*startEnd / 1000))
+        print("Number of packets that should be acquired by each MTw:", round(updateRate*startEnd / 1000))
         #####
 
         pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenamesPCKL, updateRate)
-
-        print("Abort flushing...\n")
-        if not awinda.abortFlushing():
-            raise RuntimeError("Failed to abort flushing operation.")
-
-        print("\nStopping recording...")
-        if not awinda.stopRecording():
-            raise RuntimeError("Failed to stop recording. Aborting.")
 
         print("Closing log file...")
         if not awinda.closeLogFile():
