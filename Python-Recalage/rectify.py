@@ -62,7 +62,7 @@ def main(camerasToOpen, calibFile1, calibFile2,
     # Initialize blob detector with circle parameters
     circleDetector = CircleDetector()
     # Initialize grid finding object with both streams simultaneously
-    gridFinder = CircleGridFinder(cameraType, streams, types, 
+    gridFinder = CircleGridFinder(streams, types, 
         [circleDetector, circleDetector], initialNumGrids)
 
     # Initial message to user

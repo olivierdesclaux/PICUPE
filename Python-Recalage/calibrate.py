@@ -33,7 +33,7 @@ def main(cameraType, saveDirectory, initialNumGrids = 30, minNumGrids = 25,
     maxPointError : float/int
         Maximum error to tolerate on each point during calibration, in pixels
         Beyond this, entire grid is rejected as outlier
-    rows, cols : int
+    rows, cols : int, int
         Dimensions of circle grid used to calibrate
     """
     # Initialize circle detector for finding circle shapes in images
@@ -45,8 +45,8 @@ def main(cameraType, saveDirectory, initialNumGrids = 30, minNumGrids = 25,
     except LookupError as err:
         stop(err)
     # Creates object that continually finds circle grids in images
-    gridFinder = CircleGridFinder(cameraType, [stream], [type], 
-        [circleDetector], initialNumGrids, numRows=rows, numCols=cols)
+    gridFinder = CircleGridFinder([stream], [type], [circleDetector], 
+        initialNumGrids, numRows=rows, numCols=cols)
 
     # Initial message to user
     print("Press q to exit program.")
