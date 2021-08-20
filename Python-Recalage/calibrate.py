@@ -9,8 +9,8 @@ from calibrationhandler import CalibrationHandler
 from circlegridfinder import CircleGridFinder
 from utils import stop
 
-def main(cameraType, saveDirectory, initialNumGrids = 30, minNumGrids = 25, 
-         maxPointError = 3, rows = 9, cols = 15):
+def main(cameraType, saveDirectory, initialNumGrids=30, minNumGrids=25, 
+         maxPointError=3, rows=9, cols=15):
     """Calibrate.py obtains intrinsic camera parameters using a grid pattern 
 
     Script asks user to present an asymmetric circle grid to the camera 
@@ -35,12 +35,16 @@ def main(cameraType, saveDirectory, initialNumGrids = 30, minNumGrids = 25,
         Beyond this, entire grid is rejected as outlier
     rows, cols : int, int
         Dimensions of circle grid used to calibrate
+
+    Returns
+    -------
+    None.
     """
     # Initialize circle detector for finding circle shapes in images
     circleDetector = CircleDetector()
     # Open stream based on cameraType
     try:
-        stream, type = selectStreams(cameraType[0:1])
+        [stream], [type] = selectStreams(cameraType[0:1])
     # Invalid camera types
     except LookupError as err:
         stop(err)

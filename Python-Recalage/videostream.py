@@ -170,11 +170,7 @@ def selectStreams(streamLetters):
         streams.append(stream)
         streamIndices.append(streamIndex)
 
-    # If only 1 stream is selected, do not return a list
-    if len(streams) == 1:
-        return streams[0], types[0]
-    else:
-        return streams, types
+    return streams, types
 
 class FPS:
     def __init__(self):

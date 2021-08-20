@@ -42,7 +42,7 @@ class CalibrationHandler:
         Returns length of objectPositions, aka number of grids remaining
     """
     def __init__(self, objectPositions, imagePositions, imageSize, 
-                 minimumImages, maximumPointError = 10.0):
+                 minimumImages, maximumPointError=10.0):
         self.objectPositions = objectPositions
         self.imagePositions = imagePositions
         self.imageSize = imageSize
@@ -55,7 +55,8 @@ class CalibrationHandler:
         """Attempts to perform a complete calibration, including error checking
         
         Calibrate relies on cv.calibrateCamera from OpenCV to generate 
-        camera instrinsics from objectPoints and imagePoints. It thens uses _calculateErrors() to check if the instrinsics are good.
+        camera instrinsics from objectPoints and imagePoints. It thens uses
+        _calculateErrors() to check if the instrinsics are good.
 
         Returns
         -------
@@ -194,7 +195,9 @@ class CalibrationHandler:
             ax2.set_xlabel('X error, pixels')
 
             # Intensity chart of errors based on position in image
-            contourPlot = ax2.tricontourf(self.x, self.y, self.absError, 100, cmap='magma', extend='both', antialiased=False)
+            contourPlot = ax2.tricontourf(
+                self.x, self.y, self.absError, 100, cmap='magma',
+                extend='both', antialiased=False)
             ax2.set_title('Absolute errors across image pixels')
             colorBar = fig.colorbar(contourPlot)
             colorBar.ax.set_ylabel('Absolute error')
@@ -226,8 +229,12 @@ class CalibrationHandler:
         # Outputs calibration matrices to file
         with open(filename, 'w') as file:
             # Assigns labels to values to make JSON readable
-            dumpDictionary = {'Format' : 'OpenCV', 'Model' : 'Rational','CameraMatrix' : self.cameraMatrix, 'DistortionCoefficients' : self.distortion}
-            # Uses NumpyEncoder to convert numpy values to regular arrays for json.dump
+            dumpDictionary = {
+                'Format' : 'OpenCV', 'Model' : 'Rational',
+                'CameraMatrix' : self.cameraMatrix, 
+                'DistortionCoefficients' : self.distortion}
+            # Uses NumpyEncoder to convert numpy values to regular arrays
+            # for json.dump
             json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
             print("Succesfully wrote calibration to file.")
 

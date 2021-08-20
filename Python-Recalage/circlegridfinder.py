@@ -63,10 +63,10 @@ class CircleGridFinder:
     drawOutlines(frames)
         Draws outlines from allImagePositions on corresponding frames
     len()
-        Returns length of objectPositions (aka number of grids found)
+        Returns length of objectPositions, aka number of grids found
     """
     def __init__(self, streams, streamTypes, circleDetectors, numGrids, 
-                 secondsToSkip = 2, numRows = 9, numCols = 15):
+                 secondsToSkip=2, numRows=9, numCols=15):
         if len(streams) != len(streamTypes) or \
            len(streams) != len(circleDetectors):
             raise ValueError("Length of argument lists do not match.")
@@ -191,10 +191,15 @@ class CircleGridFinder:
     def drawCircles(self, frames):
         """Search for and display circles in given frames
 
-        Affects performance because detecting circles is time-consuming
-        Draws circles in place on frames provided
-        Be careful not to draw circles multiple times on same frame
-        Assumes frames are in same order as streamTypes and circleDetectors
+        Affects performance because detecting circles is time-consuming.
+        Drawing is quick.
+
+        Parameters
+        ----------
+        frames : list of OpenCV images
+            Frames in which to find and draw circles in place
+            Be careful not to draw circles multiple times on same frame
+            Assumes frames are in same order as streamTypes and circleDetectors
 
         Returns
         -------
@@ -220,10 +225,14 @@ class CircleGridFinder:
     def drawOutlines(self, frames):
         """Draws outlines from allImagePositions on corresponding frames
 
-        Small performance impact because drawing lines is simple
-        Draws in place on provided frames
-        Assumes frames are in same order as streams, so it can draw 
-        saved grids on correct frames
+        Small performance impact because drawing lines is simple.
+
+        Parameters
+        ----------
+        frames : list of OpenCV images
+            Frame on which to draw outlines, in place
+            Assumes frames are in same order as streams, as grid positions
+            vary depending on the stream
 
         Returns
         -------
@@ -244,4 +253,6 @@ class CircleGridFinder:
                 cv.polylines(frame, [points], True, (20, 220, 90), 2)
 
     def len(self):
+        """ Returns length of objectPositions, aka number of grids found
+        """
         return len(self.objectPositions)

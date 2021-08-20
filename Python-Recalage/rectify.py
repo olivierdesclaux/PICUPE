@@ -12,7 +12,7 @@ from circlegridfinder import CircleGridFinder
 
 
 def main(camerasToOpen, calibFile1, calibFile2, 
-    saveDirectory, initialNumGrids = 20):
+    saveDirectory, initialNumGrids=20):
     """Rectify.py obtains extrinsic parameters between 2 cameras 
 
     Rectify.py uses a circle grid, just like calibrate.py. The grid must be
@@ -22,7 +22,8 @@ def main(camerasToOpen, calibFile1, calibFile2,
     and calibFile2 in .json calibrate format. Results are saved in a .json 
     file.
 
-    Parameters:
+    Parameters
+    ----------
     camerasToOpen : {'KF', 'FK', 'WK', 'KW'}
         Type and order of cameras to rectify
         K = Kinect, F = Flir, W = Webcam
@@ -32,8 +33,12 @@ def main(camerasToOpen, calibFile1, calibFile2,
         Must be .json files using CalibrationHandler.py format
     saveDirectory : string
         Directory in which to save the calibration matrices and error image
-    initialNumGrids : int
+    initialNumGrids : int, default=20
         Number of grid images to obtain  before attempting rectification
+
+    Returns
+    -------
+    None.
     """
     if len(camerasToOpen) != 2:
         stop("Only 2 cameras must be specified (K, F or W).")
@@ -140,10 +145,8 @@ def main(camerasToOpen, calibFile1, calibFile2,
             R, T, alpha=1, flags = cv.CALIB_ZERO_DISPARITY)
         print("PLeft", PLeft)        
         print("PRight", PRight)        
-        print("roiLeft")
-        print(roiLeft)
-        print("roiRight")
-        print(roiRight)
+        print("roiLeft", roiLeft)
+        print("roiRight", roiRight)
 
         # Creates filepath for results of calibration
         if not os.path.isdir(saveDirectory):
