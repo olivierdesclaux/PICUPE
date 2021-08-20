@@ -13,7 +13,7 @@ from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
 
 # Création d'un Handle pour la lecture des packets des MTw
 class MTwCallback(xda.XsCallback):
-    def __init__(self, max_buffer_size = 15):
+    def __init__(self, max_buffer_size = 5):
         xda.XsCallback.__init__(self)
         self.m_maxNumberOfPacketsInBuffer = max_buffer_size
         self.m_packetBuffer = list()
@@ -55,7 +55,7 @@ class MTwCallback(xda.XsCallback):
 ## Thread to stop recording loop ##
 def key_capture_thread():
     global keep_going
-    input("Press enter to stop recording.")
+    input("Press enter to stop recording... ")
     keep_going = False
 
 ## Main function ##

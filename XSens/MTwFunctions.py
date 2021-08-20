@@ -125,12 +125,20 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
                     dataPackets.append(pickle.load(openfile))
                 except EOFError:
                     break
-        packetCounter = [item[0] for item in dataPackets]
-        acceleration = [item[1] for item in dataPackets]
-        orientationMatrix = [item[2] for item in dataPackets]
+        packetCounter = [item[0] for item in dataPackets][4:]
+        acceleration = [item[1] for item in dataPackets][4:]
+        orientationMatrix = [item[2] for item in dataPackets][4:]
         # timeOfArrival = [item[3] for item in dataPackets]
         # timeMeasurement = timeOfArrival2timeMeasurement(timeOfArrival, updateRate)
+        numberPackets = len(packetCounter)
+        packetCounter = removeResetCounter(packetCounter)
+        ref = [x for x in range(packetCounter[0], packetCounter[-1] + 1)
+               if x not in packetCounter]
 
+        if ref:
+            packetCounter, acceleration, orientationMatrix = interPolateData(packetCounter, acceleration, orientationMatrix)
+
+        packetsMissing = len(packetCounter) - numberPackets
         filepath = os.path.join(f_path, filename)
         file_txt = open(filepath, "w")
         file_txt.write("// Start Time: Unknown: \n")
@@ -141,7 +149,8 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
             "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
         for i in range(len(packetCounter)):
-            file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
+            # file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
+            file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t\t\t\t\t\t\t")
             # date = timeMeasurement[i].split(' ')[0]
             # temps = timeMeasurement[i].split(' ')[1]
             # file_txt.write(date.split('/')[0] + "\t")
@@ -160,7 +169,7 @@ def pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenames, u
             file_txt.write("\n")
         file_txt.close()
 
-        print(devIdAll[n], "number of data packets: ", len(packetCounter))
+        print(devIdAll[n], "number of data packets: ", len(packetCounter), " with ", packetsMissing, " packets interpolated")
 
 def timeOfArrival2timeMeasurement(timeOfArrival, updateRate):
     t0 = time.strptime(timeOfArrival[4][11:-1].split('.')[0],'%H:%M:%S')
@@ -186,3 +195,27 @@ def timeOfArrival2timeMeasurement(timeOfArrival, updateRate):
 
     return timeMeasurement
 
+def removeResetCounter(PacketCounter, maxWrap = 65535):
+    index = [i for i, element in enumerate(PacketCounter) if element == 0]
+    if index:
+        for n in index:
+            for i in range(n, len(PacketCounter)):
+                PacketCounter[i] = PacketCounter[i] + maxWrap + 1
+
+    return PacketCounter
+
+def interPolateData(PacketCounter, acceleration, orientationMatrix):
+    i = 0
+    while True:
+        if PacketCounter[i+1] != PacketCounter[i] + 1:
+            acc = np.mean([acceleration[i], acceleration[i+1]], 0)
+            orientation = np.mean([orientationMatrix[i], orientationMatrix[i+1]], 0)
+            PacketCounter.insert(i+1, PacketCounter[i]+1)
+            acceleration.insert(i+1, acc)
+            orientationMatrix.insert(i+1, orientation)
+        i += 1
+
+        if PacketCounter[-1] - PacketCounter[i] == 1
+            break
+
+    return PacketCounter, acceleration, orientationMatrix
