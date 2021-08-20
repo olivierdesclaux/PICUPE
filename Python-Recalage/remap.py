@@ -28,7 +28,7 @@ def main(cameras, rectFile):
     # Opens specified rect file
     matrices, dists, Rs, Ps, rois = openRectFile(rectFile)
     # Opens specified cameras (must be 2)
-    streams, _ = selectStreams(cameras[0:2])
+    streams, _ = selectStreams(cameras[0:2], useKVS=True)
     # Gets camera sizes from first frames
     frameSizes = []
     for stream in streams:
