@@ -25,6 +25,23 @@ class CalibrationHandler:
         If a point in a grid exceeds this, the grid (image) is rejected
     calibrationDone : bool
         Indicates if calibration has completed successfully
+    retroprojectionError : float
+        Average error, in pixels, returned after cv.calibrate()
+    cameraMatrix : 3x3 np array
+        Intrinsic camera parameters
+    distortion : np array
+        8-length (Rational model) intrinsic distortion parameters
+    rotation, translation : list of np array, list of np array
+        Series of rotational/translation transformations to obtain true grid 
+        positions from base grid positions.
+        Used to calculate precise retroprojections after calibration,
+        for error checking 
+    x, y : int, int
+        Pixel coordinates of all grid points, for display of errors
+    xError, yError, absError : float, float, float
+        Distance between image points and retroprojected points
+        absError uses a L2 norm, xError and yError use x and y distance
+        X and Y errors are for scatter plot, absError is for heatmap
         
     Parameters
     ----------
