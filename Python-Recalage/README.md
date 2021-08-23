@@ -61,17 +61,19 @@ Le recalage permet de déformer deux images pour en faire correspondre les pixel
 Il fonctionne aussi avec une grille de cercles peinte en orange.
 Pour recaler deux caméras branchées à l'ordinateur, effectuer :
 ```
-python rectify.py -c CAMERAS --calibL CALIBRATION1.json --calibR CALIBRATION2.json
+python rectify.py -c CAMERAS --calib1 CALIBRATION1.json --calib2 CALIBRATION2.json
 ```
 Paramètres :
 -c : Types de caméra, dans l'ordre, 1 lettre chacune. Accepte K (Kinect), F (FLIR) ou W (Webcam). Exemple : KF (Kinect + FLIR)
---calibL : Fichier de calibrage de la première caméra
---calibR : Fichier de calibrage de la seconde caméra
+--calib1 : Fichier de calibrage de la première caméra (calculé avec calibrate.py)
+--calib2 : Fichier de calibrage de la seconde caméra (calculé avec calibrate.py)
 
 Ensuite, il faut déplacer la grille de calibrage pour couvrir le plus possible le volume observé par les caméras.
 La grille n'est acceptée que si elle est vue dans les deux caméras simultanément.
 Les recommandations qui s'applique au calibrage s'appliquent également au recalage.
 
 Le recalage est stocké dans le fichier `Results/CAMERAS_Date/RectifyCAMERAS.json`
+
+### Affichage
 
 

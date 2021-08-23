@@ -199,7 +199,8 @@ class CalibrationHandler:
         # Checks that error values exist to avoid crashing
         if self.calibrationDone:
             # Overall error printed to command line
-            print("Average retroprojection error :", round(self.retroprojectionError, 3))
+            print("Average retroprojection error :", round(
+                self.retroprojectionError, 3))
 
             # side-by-side axes that cover screen
             fig, (ax1, ax2) = plt.subplots(1,2)

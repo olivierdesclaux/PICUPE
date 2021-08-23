@@ -347,7 +347,7 @@ class FPS:
     _timer : Timer
         Triggers FPS update thread 1 second from now
     _isRunning : bool
-        Used to stop Timer
+        Prevents FPS from being started twice
 
     Parameters
     ----------
@@ -356,7 +356,7 @@ class FPS:
     Methods
     -------
     start()
-        Enables FPS calculations via a thread
+        Enables FPS calculations via a repeating Timer
     stop()
         Disables FPS calculations
     """
@@ -367,22 +367,43 @@ class FPS:
         self._isRunning = False
         self.start()
 
-    def _run(self):
+    def _takeFPS(self):
+        """Puts a snapshot of frames in fps and relaunches _timer
+
+        Returns
+        -------
+        None.
+        """
+        # Resets timer for next snapshot of frames
         self._isRunning = False
         self.start()
-        self._takeFPS()
-
-    def _takeFPS(self):
+        # Stores frames count in fps and resets frames count
         self.fps = self.frames
         self.frames = 0
 
     def start(self):
+        """Enables FPS calculations via a repeating Timer
+
+        Returns
+        -------
+        None.
+        """
+        # Check to prevent launching twice
         if not self._isRunning:
-            self._timer = Timer(1, self._run)
+            # Launches Timer to take snapshot in 1 second
+            self._timer = Timer(1, self._takeFPS)
             self._timer.start()
+            # Prevents launching twice
             self._isRunning = True
 
     def stop(self):
-        self._isRunning = False
+        """Disables FPS calculations
+
+        Returns
+        -------
+        None.
+        """
+        # Stop timer to stop next FPS count
         self._timer.cancel()
+        self._isRunning = False
 

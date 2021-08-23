@@ -153,6 +153,8 @@ class CircleGridFinder:
                 # Function searches for circleGrids using circleDetector
                 # Use CALIB_CB_SYMMETRIC_GRID for grid of parallel rows 
                 # and cols, CALIB_CB_CLUSTERING for quicker results
+                # Warning : CALIB_CB_CLUSTERING can cause incorrect grids
+                # that shift circle rows
                 ret, pos = cv.findCirclesGrid(frame, self.boardSize, 
                     flags=cv.CALIB_CB_ASYMMETRIC_GRID, 
                     blobDetector=circleDetector.get())
