@@ -38,8 +38,9 @@ des capteurs MTw, il faut appuyer *ENTER*.
 Les fichiers texte sous le dossier **MTw Pickle** contiennent toutes les paquets de données réçus par les capteurs inertiels. Le dossier **MTw data** contient les fichiers texte des capteurs qui seront insérés dans le module de Open Sense de Open Sim.
 
 ## TODO
-- [ ] Remplace the quickfix of interpolated data with either a callback (OnMissedPackets) or XSO_InterpolateMissingData in XsDevice :: setOptions
+- [ ] Replace the quickfix of interpolated data with either a callback (OnMissedPackets) or XSO_InterpolateMissingData in XsDevice :: setOptions
 - [ ] Remplace the quickfix of starting and ending at the same packet count with other solution
+- [ ] Fix the initial buffer for maxBuffer - 1 packets stored in each devices that it is not related to the recording session
 - [ ] Obtain the battery level of MTw with a callback that waits for the resquest of battery level (onMessageReceivedFromDevice)
 - [ ] Ensure that the correct orientation resets (heading and alignment) are appropriate for the implementation of Open Sense
 - [ ] Calibrate for magnetic disturbances using the magnetic field mapper gui (MFM)
