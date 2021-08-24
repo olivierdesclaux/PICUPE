@@ -25,7 +25,7 @@ Module IMU du projet PICUPE. Ce répertoire permet d'acquérir l'orientation et 
 
 1. Lancer le script python sur un terminal avec la commande suivante:
     ```
-    python MTwReceiveData.py -c (Numéro de la fréquence d'acquisition) -d (Numéro du canal radio)
+    python MTwReceiveData.py -rate (Numéro de la fréquence d'acquisition) -radio (Numéro du canal radio)
     ```
 2. Par la suite, il faut attendre que les lumières LED des capteurs MTw clignotent en synchronisation avec la lumière LED de la station awinda. Pour démarrer la détection 
 des capteurs MTw, il faut appuyer *ENTER*.
@@ -39,7 +39,7 @@ Les fichiers texte sous le dossier **MTw Pickle** contiennent toutes les paquets
 
 ## TODO
 - [ ] Replace the quickfix of interpolated data with either a callback (OnMissedPackets) or XSO_InterpolateMissingData in XsDevice :: setOptions
-- [ ] Remplace the quickfix of starting and ending at the same packet count with other solution
+- [ ] Replace the quickfix of starting and ending at the same packet count with other solution
 - [ ] Fix the initial buffer for maxBuffer - 1 packets stored in each devices that it is not related to the recording session
 - [ ] Obtain the battery level of MTw with a callback that waits for the resquest of battery level (onMessageReceivedFromDevice)
 - [ ] Ensure that the correct orientation resets (heading and alignment) are appropriate for the implementation of Open Sense
