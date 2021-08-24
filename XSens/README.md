@@ -1,6 +1,6 @@
 # Xsens Device MTw
 
-Module IMU du projet PICUPE. Ce répertoire permet d'acquérir l'orientation et l'accélerations des capteurs inertiels MTw à partir un script python MTwReceiveData.py.
+Module IMU du projet PICUPE. Ce répertoire permet d'acquérir l'orientation et l'accélerations des capteurs inertiels MTw à partir d'un script python MTwReceiveData.py.
 
 ## Installation
 
