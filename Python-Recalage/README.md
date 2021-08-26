@@ -1,7 +1,7 @@
 # Python Recalage
 
 Répertoire de stage à l'été 2021 sous la direction de Lama Séoud.
-Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.py, et d'appliquer le calibrage sur une autre image avec undistort.py.
+Actuellement, le répertoire permet de calibrer une caméra avec `calibrate.py` et une grille de cercles, de recaler deux caméras avec `rectify.py` et d'afficher le recalage avec `remapy.py`.
 
 ## Installation
 
@@ -61,7 +61,7 @@ Le recalage permet de déformer deux images pour en faire correspondre les pixel
 Il fonctionne aussi avec une grille de cercles peinte en orange.
 Pour recaler deux caméras branchées à l'ordinateur, effectuer :
 ```
-python rectify.py -c CAMERAS --calib1 CALIBRATION1.json --calib2 CALIBRATION2.json
+python rectify.py -c CAMERAS --calib1 CALIB1.json --calib2 CALIB2.json
 ```
 Paramètres :
 -c : Types de caméra, dans l'ordre, 1 lettre chacune. Accepte K (Kinect), F (FLIR) ou W (Webcam). Exemple : KF (Kinect + FLIR)
@@ -75,4 +75,15 @@ Les recommandations qui s'applique au calibrage s'appliquent également au recal
 Le recalage est stocké dans le fichier `Results/CAMERAS_Date/RectifyCAMERAS.json`
 
 ### Affichage
+Une fois le recalage effectué, il est possible d'afficher le résultat du recalage avec deux caméras.
+Le script s'utilise de la manière suivante :
+```
+python remap.py -c CAMERAS --rectFile RECTIFYCAMERAS.json
+```
+Paramètres :
+-c : Types de caméra, dans l'ordre, 1 lettre chacune. Accepte K (Kinect), F (FLIR) ou W (Webcam). Exemple : KF (Kinect + FLIR)
+--rectFile : Fichier de rectifiation généré par `rectify.py`.
+
+Pour l'affichage superposé, les paramètres manuels sont ajustables dans `remap.py`.
+
 
