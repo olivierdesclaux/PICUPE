@@ -9,7 +9,7 @@ Actuellement, le répertoire permet de calibrer une caméra RGB avec calibrate.p
 1. Installer [miniconda](https://docs.conda.io/en/latest/miniconda.html).
 1. Installer [Azure Kinect SDK](https://github.com/microsoft/Azure-Kinect-Sensor-SDK/blob/develop/docs/usage.md).
 1. Ajouter l'emplacement `C:\Program Files\Azure Kinect SDK v1.4.1\sdk\windows-desktop\amd64\release\bin` à la variable Path ([exemple ici](https://www.architectryan.com/2018/03/17/add-to-the-path-on-windows-10/))
-3. Si Visual Studio n'est pas déjà installé, installer [Microsoft Visual C++ 14.0](https://visualstudio.microsoft.com/visual-cpp-build-tools) en choissisant l'option "C++ build tools" 
+1. Si Visual Studio n'est pas déjà installé, installer [Microsoft Visual C++ 14.0](https://visualstudio.microsoft.com/visual-cpp-build-tools) en choissisant l'option "C++ build tools" 
 
 ![image de l'installation](https://docs.microsoft.com/en-us/answers/storage/attachments/34873-10262.png "")
 
@@ -48,11 +48,11 @@ Ceci signifie qu'il a rejeté des captures trop floues/imprécises, et il faut p
 
 Les recommendations suivantes sont à suivre pour un calibrage optimal : (tirés de [ce lien](https://stackoverflow.com/questions/12794876/how-to-verify-the-correctness-of-calibration-of-a-webcam/12821056#12821056)):
 1. Avoir un bon éclairage
-2. Bien fixer la caméra
-3. Placer le checkerboard à un angle de la caméra (pas de face directement)
-4. Couvrir toute l'image et tout le volume de l'espace à calibrer
-5. Éviter le motion blur dans les images
-6. S'assurer que le checkerboard est le plus rigide possible
+1. Bien fixer la caméra
+1. Placer le checkerboard à un angle de la caméra (pas de face directement)
+1. Couvrir toute l'image et tout le volume de l'espace à calibrer
+1. Éviter le motion blur dans les images
+1. S'assurer que le checkerboard est le plus rigide possible
 
 Le calibrage est stocké dans le fichier `Results/CAMERA_Date/Calib.json`.
 
@@ -75,5 +75,4 @@ Les recommandations qui s'applique au calibrage s'appliquent également au recal
 Le recalage est stocké dans le fichier `Results/CAMERAS_Date/RectifyCAMERAS.json`
 
 ### Affichage
-
 
