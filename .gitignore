@@ -6,3 +6,5 @@ Python-Recalage/Results/
 Python-Recalage/ims/
 *.sto
 *.trc
+*.ipynb
+*.log
