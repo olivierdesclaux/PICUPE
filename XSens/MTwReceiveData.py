@@ -7,6 +7,7 @@ import sys
 import pickle
 import argparse
 from threading import Lock
+
 # Local modules
 from MTwFunctions import stopAll, checkConnectedSensors, pickle2txt
 
@@ -22,11 +23,12 @@ class MTwCallback(xda.XsCallback):
     -------
     None.
     """
-    def __init__(self, max_buffer_size = 5):
+
+    def __init__(self, maxBufferSize):
         """Initialise the MTwCallback
         Parameters
         ----------
-        max_buffer_size : int
+        maxBufferSize : int
             The number of data packets a device can store before sending them to the awinda station via a flushing
             operation
         Returns
@@ -34,7 +36,7 @@ class MTwCallback(xda.XsCallback):
         None.
         """
         xda.XsCallback.__init__(self)
-        self.m_maxNumberOfPacketsInBuffer = max_buffer_size
+        self.m_maxNumberOfPacketsInBuffer = maxBufferSize
         self.m_packetBuffer = list()
         self.m_lock = Lock()
 
@@ -78,8 +80,9 @@ class MTwCallback(xda.XsCallback):
             pickle.dump((oldest_packet.packetCounter(), oldest_packet.calibratedAcceleration(),
                          oldest_packet.orientationMatrix(),
                          oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__()),
-                        (file_handle))
+                        file_handle)
         self.m_lock.release()
+
 
 def key_capture_thread(awinda):
     """Thread that stops the recording loop for the MTw devices
@@ -121,6 +124,8 @@ def main(updateRate, radioChannel):
     -------
     None.
     """
+    savePath = "./Results"
+    maxBufferSize = 5
     global keep_going
     try:
         # Extract the XsDeviceApi version used
@@ -162,7 +167,6 @@ def main(updateRate, radioChannel):
 
         assert (awinda is not 0)
         print("Disvice: %s, with ID: %s open. \n" % (awinda.productCode(), awinda.deviceId().toXsString()))
-
 
         # Put the device in configuration mode
         print("Putting device into configuraiton mode...\n")
@@ -211,13 +215,15 @@ def main(updateRate, radioChannel):
 
         for i in range(len(MTws)):
             devIdAll.append(MTws[i].deviceId())
-            mtwCallbacks.append(MTwCallback())
-            MTws[i].addCallbackHandler(mtwCallbacks[i]) # add callback to handle data transmission to each MTw
+            mtwCallbacks.append(MTwCallback(maxBufferSize))
+            MTws[i].addCallbackHandler(mtwCallbacks[i])  # add callback to handle data transmission to each MTw
 
         devicesUsed, devIdUsed, nDevs = checkConnectedSensors(devIdAll, MTws, controlDev, awinda, Ports)
 
+        #### Flushing the devices
+        controlDev.flushInputBuffers()
 
-        MTw_pickle = os.path.dirname(os.path.realpath("__file__")) + "\\MTw Pickle"
+        MTw_pickle = os.path.join(savePath, "MTw Pickle")
 
         # Create pickle txt files for each MTw connected
         for n in range(nDevs):
@@ -230,7 +236,6 @@ def main(updateRate, radioChannel):
 
         if not awinda.gotoMeasurement():
             raise RuntimeError("Could not put device into measurement mode. Aborting.")
-
 
         # Wait period to let the filters of the devices warm up before acquiring data
         print("Wait 10 seconds before starting data acquisition.\n")
@@ -261,11 +266,10 @@ def main(updateRate, radioChannel):
 
         startEnd = xda.XsTimeStamp_nowMs() - startTime
         print("Time of recording (s): ", startEnd / 1000, "\n")
-        print("Number of packets that should be acquired by each MTw:", round(updateRate*startEnd / 1000))
-
+        print("Number of packets that should be acquired by each MTw:", round(updateRate * startEnd / 1000))
 
         # Writing the data from a pickle txt file to a readable txt file
-        pickle2txt(devId, devIdAll, devIdUsed, nDevs, firmware_version, filenamesPCKL, updateRate, maxBuffer=5)
+        pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenamesPCKL, updateRate, savePath, maxBufferSize)
 
         print("Closing log file...")
         if not awinda.closeLogFile():
@@ -280,23 +284,27 @@ def main(updateRate, radioChannel):
         print(error)
         sys.exit(1)
 
-    except:
+    except Exception as e:
         print("An unknown fatal error has occurred. Aborting.")
+        print(e)
         sys.exit(1)
 
     else:
         print("Successful exit.")
+
 
 ####
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     # Select update rate with -rate argument.
-    parser.add_argument('-rate', type=int, dest='updateRate', default=40, help='Select an update rate (40 - 120) Hz',
-                        required=True)
+    parser.add_argument('-r', '--rate', type=int, dest='updateRate', default=40,
+                        help='Select an update rate (40 - 120) Hz',
+                        required=False)
     # Select radio channel with -radio argument
-    parser.add_argument('-radio', type=int, dest='radioChannel', default=11, help='Select a radio Channel between 11 to 25',
-                        required=True)
+    parser.add_argument('--radio', type=int, dest='radioChannel', default=11,
+                        help='Select a radio Channel between 11 to 25',
+                        required=False)
     args = parser.parse_args().__dict__
 
     updateRate = args['updateRate']
