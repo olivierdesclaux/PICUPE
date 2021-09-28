@@ -1,0 +1,20 @@
+name: picupe38
+
+channels:
+  - defaults
+  - conda-forge
+  - anaconda
+
+dependencies:
+  - python=3.8
+  - numpy
+  - scipy
+  - matplotlib
+  - pyopengl
+  - simbody
+  - typing_extensions
+  - jupyter
+  - pythonnet
+  - pip
+  - pip:
+    - opencv-python
