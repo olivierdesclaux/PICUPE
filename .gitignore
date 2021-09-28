@@ -2,3 +2,7 @@
 *.trc
 __pycache__/
 *.pyc
+Python-Recalage/Results/
+Python-Recalage/ims/
+*.sto
+*.trc
