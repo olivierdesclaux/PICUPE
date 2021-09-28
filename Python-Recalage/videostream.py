@@ -3,6 +3,7 @@ from enum import Enum
 import cv2 as cv
 import pyk4a as k4a
 
+
 class VideoStream:
     """Returns frames from an OpenCV VideoCapture
 
@@ -35,6 +36,7 @@ class VideoStream:
     stop()
         Stops frame-capturing thread and releases _capture
     """
+
     def __init__(self, videocapture, flag=""):
         # initialize the file video stream
         self._capture = videocapture
@@ -70,8 +72,8 @@ class VideoStream:
                 grabbed, self.frame = self._capture.read()
                 # Ends thread if read() fails
                 if not grabbed:
-                    self.stopped = True                        
-    
+                    self.stopped = True
+
     def read(self):
         """Returns latest frame taken in thread
         """
@@ -119,17 +121,19 @@ class KinectVideoStream:
     stop()
         Stops frame-capturing thread and releases capture
     """
+
     def __init__(self):
         # Open Kinect with pyK4a for more options and depth mode
         self._kinect = k4a.PyK4A(k4a.Config(
-                    color_resolution=k4a.ColorResolution.RES_720P,
-                    depth_mode=k4a.DepthMode.NFOV_UNBINNED,
-                    camera_fps=k4a.FPS.FPS_30,
-                    synchronized_images_only=True,
-                ))
+            color_resolution=k4a.ColorResolution.RES_720P,
+            depth_mode=k4a.DepthMode.NFOV_UNBINNED,
+            camera_fps=k4a.FPS.FPS_30,
+            synchronized_images_only=True,
+        ))
         # Starts kinect and obtains first frame to fill attributes
         self._kinect.start()
         frame = self._kinect.get_capture()
+        self.frame = frame
         # Gets only BGR components of color
         self.color = frame.color[:, :, :3]
         # Passes depth through conversion function 
@@ -153,14 +157,20 @@ class KinectVideoStream:
             else:
                 # Grab next frame
                 try:
-                    frame  = self._kinect.get_capture()
+                    frame = self._kinect.get_capture()
+                    self.frame = frame
                     self.color = frame.color[:, :, :3]
                     self.depth = self._normalizeDepth(frame.depth)
                 except:
-                # Ends thread if get_capture() fails
+                    # Ends thread if get_capture() fails
                     self.stopped = True
 
     def read(self):
+        """ Returns latest frame taken in the thread
+        """
+        return self.frame
+
+    def readColor(self):
         """Returns latest color frame taken in thread
         """
         return self.color
@@ -177,7 +187,7 @@ class KinectVideoStream:
         self.stopped = True
         # Closes Kinect camera
         self._kinect.stop()
-    
+
     def _normalizeDepth(self, frame, maxValue=4000):
         """Clips and normalizes depth frame for OpenCV display
 
@@ -202,16 +212,18 @@ class KinectVideoStream:
         # and normalize values to maximise contrast
         return cv.normalize(
             clipFrame, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
-    
+
+
 class StreamType(Enum):
     """Possible types of camera streams
     """
-    rgb = 0 # Color
-    ir = 1 # Infrared
+    rgb = 0  # Color
+    ir = 1  # Infrared
     depth = 2
 
-def openStream(targetCamera = None, targetHeight = None, flag = "", 
-               openedStreams = []):
+
+def openStream(targetCamera=None, targetHeight=None, flag="",
+               openedStreams=[]):
     """ Creates OpenCV capture from target and checks it is open
     
     Selection of cameras can be done two ways: 
@@ -267,14 +279,15 @@ def openStream(targetCamera = None, targetHeight = None, flag = "",
                     # Otherwise, releases capture and moves on to next camera
                     cap.release()
                     cameraIndex += 1
-            else: 
-            # If we reach the end of available cameras
+            else:
+                # If we reach the end of available cameras
                 raise Exception(
-                    "Unable to open camera with height " 
+                    "Unable to open camera with height "
                     + str(targetHeight) + " px")
     # If no camera parameter specified
     else:
         raise Exception("No camera specified.")
+
 
 def selectStreams(streamLetters, useKVS=False):
     """ Opens several streams based on stream identifier
@@ -306,29 +319,30 @@ def selectStreams(streamLetters, useKVS=False):
     for letter in streamLetters:
         if useKVS and letter == "K":
             stream = KinectVideoStream()
-            types.append(StreamType.rgb)     
+            types.append(StreamType.rgb)
         elif letter == "K":
             stream, streamIndex = openStream(
-                targetHeight = 720, openedStreams=streamIndices)
+                targetHeight=720, openedStreams=streamIndices)
             types.append(StreamType.rgb)
         elif letter == "F":
             stream, streamIndex = openStream(
-                targetHeight = 768, openedStreams=streamIndices)
+                targetHeight=768, openedStreams=streamIndices)
             types.append(StreamType.ir)
         elif letter == "W":
             stream, streamIndex = openStream(
-                targetCamera = 0, flag = "W", openedStreams=streamIndices)
+                targetCamera=0, flag="W", openedStreams=streamIndices)
             types.append(StreamType.rgb)
         else:
             # If letter does not match any of the options
             for stream in streams:
                 stream.stop()
             raise LookupError("Invalid camera types selected.")
-            
+
         streams.append(stream)
-        streamIndices.append(streamIndex)
+        # streamIndices.append(streamIndex)
 
     return streams, types
+
 
 class FPS:
     """Uses frame counts to generate an FPS number every second
@@ -360,6 +374,7 @@ class FPS:
     stop()
         Disables FPS calculations
     """
+
     def __init__(self):
         self.frames = 0
         self.fps = 0
@@ -407,3 +422,11 @@ class FPS:
         self._timer.cancel()
         self._isRunning = False
 
+
+def height2name(height):
+    if height == 768:
+        return "FLIR"
+    elif height == 720:
+        return "Kinect"
+    else:
+        return True
