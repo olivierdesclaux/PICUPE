@@ -7,4 +7,6 @@ Python-Recalage/ims/
 *.sto
 *.trc
 *.ipynb
-*.log
+**.log
+./sandbox/results/**
+**.png
