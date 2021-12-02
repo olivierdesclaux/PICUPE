@@ -1,0 +1,13 @@
+
+name: recalage
+dependencies:
+  - python=3.7
+  - pip
+  - ffmpeg
+  - typing_extensions
+  - pip:
+    - numpy
+    - matplotlib
+    - scikit-image
+    - tqdm
+    - opencv-python
