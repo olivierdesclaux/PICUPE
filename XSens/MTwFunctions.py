@@ -128,19 +128,19 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
             time.sleep(0.1)
             print("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % mt.batteryLevel())
 
-        option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
-        change = []
-        if option[0] == 'n':
-            op2 = input(
-                "\n Type the numbers of the sensors (csv list, e.g. 1,2,3) from which status should be changed \n (if accepted than reject or the other way around):\n")
-            change = [int(i) for i in re.split(",", op2)]
-            for i in range(len(change)):
-                if devIdAll[change[i]]:
-                    device.rejectConnection(children[change[i]])
-                    childUsed[change[i]] = False
-                else:
-                    device.acceptConnection(children[change[i]])
-                    childUsed[change[i]] = True
+        # option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
+        # change = []
+        # if option[0] == 'n':
+        #     op2 = input(
+        #         "\n Type the numbers of the sensors (csv list, e.g. 1,2,3) from which status should be changed \n (if accepted than reject or the other way around):\n")
+        #     change = [int(i) for i in re.split(",", op2)]
+        #     for i in range(len(change)):
+        #         if devIdAll[change[i]]:
+        #             device.rejectConnection(children[change[i]])
+        #             childUsed[change[i]] = False
+        #         else:
+        #             device.acceptConnection(children[change[i]])
+        #             childUsed[change[i]] = True
         if sum(childUsed) == 0:
             stopAll(device, control, Ports)
             raise RuntimeError("No MTw devices found. Aborting.")
@@ -158,7 +158,7 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
     devId : string
         ID of the awinda station
     devIdUsed: list strings
-        List of de connected MTw devices IDs
+        List of the connected MTw devices IDs
     nDevs : int
         Number of the connected MTw devices
     firmware_version : string
@@ -187,16 +187,11 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
                     dataPackets.append(pickle.load(openfile))
                 except EOFError:
                     break
-        # ref = 1
-        # while dataPackets[ref][0] - 1 == dataPackets[ref-1][0]:
-        #     ref += 1
-        # packetCounter = [item[0] for item in dataPackets][ref:]
         packetCounter = [item[0] for item in dataPackets][maxBuffer - 1:]
         nPacketFinal.append(packetCounter[-1])
         nPacketInitial.append(packetCounter[0])
-    nPacketFinalRef = int(np.median(nPacketFinal))  # Quick fix for all devices to start at the same data packet counter
-    nPacketInitialRef = int(
-        np.median(nPacketInitial))  # Quick fix for all devices to end at the same data packet counter
+    finalPacket = int(np.median(nPacketFinal))  # Quick fix for all devices to start at the same data packet counter
+    initialPacket = int(np.median(nPacketInitial))  # Quick fix for all devices to end at the same data packet counter
 
     for n in range(nDevs):
         dataPackets = []
@@ -214,47 +209,26 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
         # timeOfArrival = [item[3] for item in dataPackets]
         numberPacketsRaw = len(packetCounter)
 
-        # Quick fix to remove the packet counter wrapper
+        # Remove the packet counter wrapper
         packetCounter = removeResetCounter(packetCounter)
-        ref = [x for x in range(packetCounter[0], packetCounter[-1] + 1)
-               if x not in packetCounter]
 
-        # Quick fix to interpolate missing data packets
-        if ref:
-            packetCounter, acceleration, orientationMatrix = interPolateData(packetCounter, acceleration,
-                                                                             orientationMatrix)
+        # Interpolate missing data packets
+        packetCounter, acceleration, orientationMatrix = interpolateData(packetCounter, acceleration, orientationMatrix, timeOfArrival)
 
-        # Quick fix to start at the same packet count
-        if packetCounter[0] > nPacketInitialRef:
-            packetCounter.insert(0, packetCounter[0] - 1)
-            acceleration.insert(0, acceleration[0])
-            orientationMatrix.insert(0, orientationMatrix[0])
-            timeOfArrival.insert(0, timeOfArrival[0])
+        # Make sure all packets start at the same packet counter
+        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketStart(packetCounter, acceleration, orientationMatrix, timeOfArrival, initialPacket)
 
-        # Quick fix to end at the same packet count
-        elif packetCounter[0] < nPacketInitialRef:
-            packetCounter.pop(0)
-            acceleration.pop(0)
-            orientationMatrix.pop(0)
-            timeOfArrival.pop(0)
+        # Make sure all packets end at the same packet counter
+        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketEnd(packetCounter, acceleration, orientationMatrix, timeOfArrival, finalPacket)
 
-        if packetCounter[-1] < nPacketFinalRef:
-            packetCounter.append(packetCounter[-1] + 1)
-            acceleration.append(acceleration[-1])
-            orientationMatrix.append(orientationMatrix[-1])
-            timeOfArrival.append(timeOfArrival[-1])
-        elif packetCounter[-1] > nPacketFinalRef:
-            packetCounter.pop()
-            acceleration.pop()
-            orientationMatrix.pop()
-            timeOfArrival.pop()
-
+        # Get number of interpolated data packets
         numberPackets = len(packetCounter)
         packetsMissing = abs(numberPackets - numberPacketsRaw)
 
-        # Quick fix to estimate the utc time of data packets from time of arrival
-        timeMeasurement = timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets)
-        # print(timeMeasurement)
+        # Estimate the utc time of data packets from time of arrival
+        # timeMeasurement = timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets)
+        timeMeasurement = timeOfArrival
+
         filepath = os.path.join(f_path, filename)
         file_txt = open(filepath, "w")
         file_txt.write("// Start Time: Unknown: \n")
@@ -263,7 +237,7 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
         file_txt.write("// Firmware Version: " + str(firmware_version.toXsString()) + "\n")
         file_txt.write("// Option Flags: AHS Disabled ICC Disabled \n")
         file_txt.write(
-            "PacketCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
+            "packetCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
         for i in range(len(packetCounter)):
             file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
@@ -285,11 +259,47 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
             file_txt.write("\n")
         file_txt.close()
 
-        print(devIdUsed[n], "number of data packets: ", len(packetCounter), " with ", packetsMissing,
-              " packets interpolated")
+        print(devIdUsed[n], "Number of data packets: {} with {} packets interpolated, ({} %)".format(
+            len(packetCounter), packetsMissing, round(packetsMissing / len(packetCounter) * 100, 4)))
 
 
-def timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets):
+def setPacketStart(packetCounter, acceleration, orientationMatrix, timeOfArrival, initialPacket):
+    # If we start after the reference initial packet, add packets iteratively
+    while packetCounter[0] > initialPacket:
+        packetCounter.insert(0, packetCounter[0] - 1)
+        acceleration.insert(0, acceleration[0])
+        orientationMatrix.insert(0, orientationMatrix[0])
+        timeOfArrival.insert(0, timeOfArrival[0])
+
+    # If we start before the reference initial packet, remove them iteratively.
+    while packetCounter[0] < initialPacket:
+        packetCounter.pop(0)
+        acceleration.pop(0)
+        orientationMatrix.pop(0)
+        timeOfArrival.pop(0)
+
+    return packetCounter, acceleration, orientationMatrix, timeOfArrival,
+
+
+def setPacketEnd(packetCounter, acceleration, orientationMatrix, timeOfArrival, finalPacket):
+    # If missing final packets, add them iteratively
+    while packetCounter[-1] < finalPacket:
+        packetCounter.append(packetCounter[-1] + 1)
+        acceleration.append(acceleration[-1])
+        orientationMatrix.append(orientationMatrix[-1])
+        timeOfArrival.append(timeOfArrival[-1])
+
+    # If extra final packets, remove them iteratively
+    while packetCounter[-1] > finalPacket:
+        packetCounter.pop()
+        acceleration.pop()
+        orientationMatrix.pop()
+        timeOfArrival.pop()
+
+    return packetCounter, acceleration, orientationMatrix, timeOfArrival
+
+
+def timeOfArrival2timeMeasurement(timeOfArrival, updateRate):
     """Estimates the utc time of data packets sent by the MTw to the awinda station
     Parameters
     ----------
@@ -304,6 +314,7 @@ def timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets):
      timeMeasurement : list strings
         List of estimated utc times of the data packets
     """
+    nPackets = len(timeOfArrival)
     t0 = time.strptime(timeOfArrival[0][11:-1].split('.')[0], '%H:%M:%S')
     t0_s = datetime.timedelta(hours=t0.tm_hour, minutes=t0.tm_min, seconds=t0.tm_sec).total_seconds()
     t0_ms = int(timeOfArrival[0][11:].split('.')[1]) / 1000
@@ -313,11 +324,11 @@ def timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets):
     t_ms = int(timeOfArrival[-1][11:].split('.')[1]) / 1000
 
     delta_t_dot = round((t_s + t_ms) - (t0_s + t0_ms), 3)
-    delta = round(np.abs(delta_t_dot - numberPackets / updateRate), 3)
+    delta = round(np.abs(delta_t_dot - nPackets / updateRate), 3)
 
     timeMeasurement = []
     temps_init = t0_s + t0_ms - delta
-    for n in range(numberPackets):
+    for n in range(nPackets):
         seconds = round(temps_init + n / 60, 3)
         m_s = round(seconds % 1, 3)
         ty_res = time.gmtime(seconds)
@@ -328,64 +339,71 @@ def timeOfArrival2timeMeasurement(timeOfArrival, updateRate, numberPackets):
     return timeMeasurement
 
 
-def removeResetCounter(PacketCounter, maxWrap=65535):
+def removeResetCounter(packetCounter, maxWrap=65535):
     """QUICKFIX to remove the reset counter at packet count # 65535
     Parameters
     ----------
-    PacketCounter : list int
+    packetCounter : list int
         List of packet count for the data packets
     maxWrap : int
         The number that the packet count reset to 0
     Returns
     -------
-     PacketCounter : list int
+     packetCounter : list int
         List of packet counter without any resets at count # 65535
     """
     index = []
-    for i in range(len(PacketCounter)):
-        if PacketCounter[i] // 10 == 0 and PacketCounter[i - 1] // 10 != 0:
+    for i in range(len(packetCounter)):
+        if packetCounter[i] // 10 == 0 and packetCounter[i - 1] // 10 != 0:
             index.append(i)
 
     if index:
         for n in index:
-            for i in range(n, len(PacketCounter)):
-                PacketCounter[i] = PacketCounter[i] + maxWrap + 1
-    return PacketCounter
+            for i in range(n, len(packetCounter)):
+                packetCounter[i] = packetCounter[i] + maxWrap + 1
+    return packetCounter
 
 
-def interPolateData(PacketCounter, acceleration, orientationMatrix):
+def interpolateData(packetCounter: list, accelerationMatrix: list, orientationMatrix: list, timeOfArrival: list) -> [list, list, list, list]:
     """QUICKFIX to interpolate missing data packets
     Parameters
     ----------
-    PacketCounter : list int
+    packetCounter : list int
         List of packet count for the data packets
-    acceleration : list numpy array [1,3]
+    accelerationMatrix : list numpy array [1,3]
         List of the calibrated XYZ accelerations of the data packets
     orientationMatrix : list numpy array [3,3]
         List of the rotation matrix of the data packets
     Returns
     -------
-     PacketCounter :
+     packetCounter :
         List of packet counter with the interpolated missing data packets
-    acceleration : list numpy array [1,3]
+    accelerationMatrix : list numpy array [1,3]
         List of the calibrated XYZ accelerations with the interpolated accelerations
     orientationMatrix : list numpy array [3,3]
         List of the rotation matrix with the interpolated rotation matrix
     """
     i = 0
     while True:
-        if PacketCounter[i + 1] != PacketCounter[i] + 1:
-            acc = np.mean([acceleration[i], acceleration[i + 1]], 0)
+        if packetCounter[i + 1] != packetCounter[i] + 1:
+            # Compute mean values
+            acc = np.mean([accelerationMatrix[i], accelerationMatrix[i + 1]], 0)
             orientation = np.mean([orientationMatrix[i], orientationMatrix[i + 1]], 0)
-            PacketCounter.insert(i + 1, PacketCounter[i] + 1)
-            acceleration.insert(i + 1, acc)
+            t1 = datetime.datetime.strptime(timeOfArrival[i], '%Y/%m/%d %H:%M:%S.%f')
+            t2 = datetime.datetime.strptime(timeOfArrival[i+1], '%Y/%m/%d %H:%M:%S.%f')
+            t = (t1 + 0.5*(t2 - t1)).strftime('%Y/%m/%d %H:%M:%S.%f') # Compute mean timestamp
+            t = t[:-3] # datetime obj has precision to nanosec, but we stop at micro (3 digits instead of 6)
+            # Insert them at the appropriate indices
+            packetCounter.insert(i + 1, packetCounter[i] + 1)
+            accelerationMatrix.insert(i + 1, acc)
             orientationMatrix.insert(i + 1, orientation)
+            timeOfArrival.insert(i+1, t)
         i += 1
 
-        if PacketCounter[-1] - PacketCounter[i] == 1:
+        if packetCounter[-1] - packetCounter[i] == 1:
             break
 
-    return PacketCounter, acceleration, orientationMatrix
+    return packetCounter, accelerationMatrix, orientationMatrix
 
 
 class MTwCallback(xda.XsCallback):
@@ -481,7 +499,7 @@ def key_capture_thread(awinda):
         print("Failed to stop recording. Aborting.")
 
 
-def initialiseAwinda(updateRate, radioChannel, savePath, maxBufferSize):
+def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
     MTw_pickle = os.path.join(savePath, "MTw Pickle")
     if not os.path.isdir(MTw_pickle):
         os.mkdir(MTw_pickle)
@@ -561,11 +579,17 @@ def initialiseAwinda(updateRate, radioChannel, savePath, maxBufferSize):
     except ValueError:
         print("The radio is still active, please undock the device from the computer and try again.")
 
-    input(
-        '\n Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds), then press enter... \n')
-
+    # input('\n Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds), '
+    #       'then press enter... \n')
+    print("Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds)")
+    # time.sleep(10)
     # Attaching XsDevice objects to each MTw wireless connected to the awinda station
     MTws = awinda.children()
+
+    # Waiting for all IMUs to be attached
+    while len(MTws) < nIMUs:
+        time.sleep(0.1)
+        MTws = awinda.children()
 
     devIdAll = []
     mtwCallbacks = []
@@ -590,13 +614,21 @@ def initialiseAwinda(updateRate, radioChannel, savePath, maxBufferSize):
         raise RuntimeError("Could not put device into measurement mode. Aborting.")
 
     # Wait period to let the filters of the devices warm up before acquiring data
-    print("Wait 10 seconds before starting data acquisition. XSens filters are warming up \n")
+    print("Wait 10 seconds before starting data acquisition. XSens filters are warming up... \n")
     time.sleep(10)
-
+    print("IMUs are ready.\n")
     # Reset the yaw (XRM_Heading), pitch and roll (XRM_Alignment) angles to 0
     for n in range(nDevs):
         if not devicesUsed[n].resetOrientation(xda.XRM_Heading + xda.XRM_Alignment):
             print("Could not reset the header.")
 
-    keep_going = True
+    if not awinda.startRecording():
+        raise RuntimeError("Failed to start recording. Aborting.")
+
     return awinda, mtwCallbacks, filenamesPCKL, devId, devIdUsed, nDevs, firmware_version, controlDev, Ports
+
+
+def writeXsens(mtwCallbacks, filenamesPCKL):
+    for callback, filenamePCKL in zip(mtwCallbacks, filenamesPCKL):
+        if callback.packetAvailable():
+            callback.writeData(filenamePCKL)
