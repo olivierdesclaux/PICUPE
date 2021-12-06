@@ -1,6 +1,6 @@
 import multiprocessing
 import msvcrt
-from utils import *
+from readersWriters import *
 
 
 
@@ -22,7 +22,7 @@ def main():
 
     # Webcam Queue
     webcamQueue = multiprocessing.Queue()
-    WEBCAM = False
+    WEBCAM = True
     # Webcam Process
     if WEBCAM:
         webcamPort = findCameraPort("webcam")
