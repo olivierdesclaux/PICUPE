@@ -1,6 +1,6 @@
 from threading import Thread, Timer
 from enum import Enum
-import cv2 as cv
+import cv2.cv2 as cv2
 import pyk4a as k4a
 
 
@@ -40,15 +40,15 @@ class VideoStream:
     def __init__(self, videocapture, flag=""):
         # initialize the file video stream
         self._capture = videocapture
-        self._capture.set(cv.CAP_PROP_BUFFERSIZE, 2)
+        self._capture.set(cv2.CAP_PROP_BUFFERSIZE, 2)
         # TEMP : for webcam only, set dimensions to maximise resolution
         if "W" in flag:
-            self._capture.set(cv.CAP_PROP_FRAME_WIDTH, 1280)
-            self._capture.set(cv.CAP_PROP_FRAME_HEIGHT, 720)
+            self._capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+            self._capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         # Forces a different codec for capture
         # ESSENTIAL to maintain stream FPS for FLIR camera
         self._capture.set(
-            cv.CAP_PROP_FOURCC, cv.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
         _, self.frame = self._capture.read()
 
         # Used to indicate if the thread should be stopped or not
@@ -168,7 +168,8 @@ class KinectVideoStream:
     def read(self):
         """ Returns latest frame taken in the thread
         """
-        return self.frame
+        # return self.frame
+        return self.color
 
     def readColor(self):
         """Returns latest color frame taken in thread
@@ -210,8 +211,8 @@ class KinectVideoStream:
         clipFrame = frame.clip(0, maxValue)
         # Convert 8U values to standard grayscale 
         # and normalize values to maximise contrast
-        return cv.normalize(
-            clipFrame, None, 0, 255, cv.NORM_MINMAX, dtype=cv.CV_8U)
+        return cv2.normalize(
+            clipFrame, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
 
 
 class StreamType(Enum):
@@ -252,7 +253,7 @@ def openStream(targetCamera=None, targetHeight=None, flag="",
         raise Exception("Camera already opened.")
     elif targetCamera is not None:
         # CAP_DSHOW is essential for FLIR framerate
-        cap = cv.VideoCapture(targetCamera, cv.CAP_DSHOW)
+        cap = cv2.VideoCapture(targetCamera, cv2.CAP_DSHOW)
         if cap.isOpened():
             print("Found camera number", targetCamera)
             return VideoStream(cap, flag), targetCamera
@@ -268,10 +269,10 @@ def openStream(targetCamera=None, targetHeight=None, flag="",
             while cameraIndex in openedStreams:
                 cameraIndex += 1
             # CAP_DSHOW is essential for FLIR framerate
-            cap = cv.VideoCapture(cameraIndex, cv.CAP_DSHOW)
+            cap = cv2.VideoCapture(cameraIndex, cv2.CAP_DSHOW)
 
             if cap.isOpened():
-                frameHeight = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+                frameHeight = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
                 if frameHeight == targetHeight:
                     print("Found camera with height", targetHeight, "px")
                     return VideoStream(cap, flag), cameraIndex
@@ -311,7 +312,10 @@ def selectStreams(streamLetters, useKVS=False):
     # Keeps track of opened streams to prevent double opening
     streamIndices = []
     types = []
-
+    permute = False
+    if streamLetters == "KF":
+        permute = True
+        streamLetters = "FK"
     # We can identify on which port the camera is located by looking at 
     # the height of the image in different ports.
     # The FLIR in IR has a height of 768 pixels 
@@ -340,7 +344,9 @@ def selectStreams(streamLetters, useKVS=False):
 
         streams.append(stream)
         # streamIndices.append(streamIndex)
-
+    if permute:
+        streams = [streams[1], streams[0]]
+        types = [types[1], types[0]]
     return streams, types
 
 
