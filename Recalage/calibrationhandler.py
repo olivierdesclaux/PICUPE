@@ -61,7 +61,7 @@ class CalibrationHandler:
         Returns length of objectPositions, aka number of grids remaining
     """
 
-    def __init__(self, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError):
+    def __init__(self, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError, flags):
         self.objectPositions = objectPositions
         self.imagePositions = imagePositions
         self.imageSize = imageSize
@@ -72,6 +72,7 @@ class CalibrationHandler:
         self.rotation = []
         self.translation = []
         self.distortion = []
+        self.flags = flags
         # Calibration marked as incomplete
         self.calibrationDone = False
 
@@ -94,20 +95,20 @@ class CalibrationHandler:
             the calibration is impossible
         """
         # Checks that there are sufficient images remaining to perform an adequate calibration
-        if len(self.objectPositions) > self.minimumImages:
+        if len(self.objectPositions) >= self.minimumImages:
             # Calculates calibration parameters
 
             intrinsicsGuess, _ = openCalibrationFile("Results/CalibFLIRInitialGuess.json")
-            flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_USE_INTRINSIC_GUESS
+            # flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_USE_INTRINSIC_GUESS
 
             # intrinsicsGuess = None
             # flags = cv2.CALIB_RATIONAL_MODEL
 
             self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = \
                 cv2.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, intrinsicsGuess, None,
-                                    flags=flags)
+                                    flags=self.flags)
             # Rational model uses 8 params, but 12 are returned (last 4 are 0)
-            self.distortion = self.distortion[:, 0:8]
+            # self.distortion = self.distortion[:, 0:8]
             # Checks for outliers using calibration parameters
             self.calibrationDone = self.computeErrors()
         else:

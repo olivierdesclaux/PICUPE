@@ -10,7 +10,7 @@ from circlegridfinder import CircleGridFinder
 from utils import stop
 
 
-def calibrateCamera(cameraType, saveDirectory, initialNumGrids=40, minNumGrids=35, maxPointError=1.0, rows=9, cols=15):
+def calibrateCamera(cameraType, saveDirectory, flags, initialNumGrids=40, minNumGrids=35, maxPointError=1.0, rows=9, cols=15):
     """Calibrate.py obtains intrinsic camera parameters using a grid pattern 
 
     Script asks user to present an asymmetric circle grid to the camera 
@@ -77,7 +77,7 @@ def calibrateCamera(cameraType, saveDirectory, initialNumGrids=40, minNumGrids=3
                 # Indicates how many images remain to take in upper left
                 cv2.putText(frame, 'Remaining images: ' + str(initialNumGrids - gridFinder.len()), (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (250, 150, 0), 2)
                 # Shows frame
-                cv2.imshow('Calibration', frame)
+                cv2.imshow('Camera Calibration', frame)
                 # Waits 1 ms for user input, allowing user to 
                 # quit main loop if 'q' is pressed
                 if cv2.waitKey(1) == ord('q'):
@@ -89,14 +89,14 @@ def calibrateCamera(cameraType, saveDirectory, initialNumGrids=40, minNumGrids=3
         # and error-checking
         calibration = CalibrationHandler(gridFinder.objectPositions,
                                          gridFinder.allImagePositions[0], frameSize,
-                                         minNumGrids, maxPointError)
+                                         minNumGrids, maxPointError, flags)
 
         # If the calibration succeeds
         if calibration.calibrate():
             # Tries to save matrices to directory, can fail if
             # wrong directory/file in use
             try:
-                calibration.writeToFile(saveDirectory, cameraType)
+                calibration.writeToFile(saveDirectory, cameraType + "Calib.json")
             except:
                 stop("Failed to write matrices to file.", [stream])
             # Break out of grid-finding loop
@@ -106,11 +106,10 @@ def calibrateCamera(cameraType, saveDirectory, initialNumGrids=40, minNumGrids=3
         else:
             # Otherwise, return to grid-finding loop
             print("Calibration failed, needs more images.")
-
     print("Calibration successful.")
     stream.stop()
 
-    return os.path.join(saveDirectory, cameraType)
+    return os.path.abspath(os.path.join(saveDirectory, cameraType + "Calib.json"))
 
 # Standard argument parser implementation for command-line use
 if __name__ == '__main__':
