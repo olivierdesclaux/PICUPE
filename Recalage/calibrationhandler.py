@@ -98,7 +98,7 @@ class CalibrationHandler:
         if len(self.objectPositions) >= self.minimumImages:
             # Calculates calibration parameters
 
-            intrinsicsGuess, _ = openCalibrationFile("Results/CalibFLIRInitialGuess.json")
+            intrinsicsGuess, _ = openCalibrationFile(r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\CalibFLIRInitialGuess.json")
             # flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_USE_INTRINSIC_GUESS
 
             # intrinsicsGuess = None
