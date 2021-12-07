@@ -154,8 +154,8 @@ def stereoCalibrate(camerasToOpen, calibFile1, calibFile2, saveDirectory, flags,
     return filename
 
 
-def rectify(stereoCalibrationFile):
-    matrixLeft, distLeft, matrixRight, distRight, frameSizeLeft, R, T = openStereoCalibrationFile(stereoCalibrationFile)
+def rectify(saveDirectory):
+    matrixLeft, distLeft, matrixRight, distRight, frameSizeLeft, R, T = openStereoCalibrationFile(os.path.join(saveDirectory, "stereo.json"))
     # Alpha can be varied from 0 (no black pixels)
     # to 1 (all pixels) in undistorted image
     # This returns R, T matrices to transforms PIXELS between images
