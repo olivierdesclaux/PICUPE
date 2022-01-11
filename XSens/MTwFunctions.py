@@ -1,15 +1,15 @@
-import datetime
-
 import numpy as np
 import xsensdeviceapi as xda
 import sys
 import re
-import threading as th
 import os
 import time
 import pickle
 import datetime
 from threading import Lock
+
+sys.path.append("../sandbox")
+import myLogger
 
 
 class MTwIdentifier:
@@ -53,7 +53,7 @@ class MTwIdentifier:
             self.label = 'SHOU_L'
 
 
-def stopAll(device, control, Ports):
+def stopAll(device, control, Ports, logger):
     """Quits program cleanly and closes all ports of XSens devices
     Parameters
     ----------
@@ -67,18 +67,18 @@ def stopAll(device, control, Ports):
     -------
     None.
     """
-    print("Putting device back into configuration mode.")
+    logger.log("Putting device back into configuration mode.")
     device.gotoConfig()
     device.disableRadio()
 
-    print("Closing ports...")
+    logger.log("Closing ports...")
     control.closePort(Ports)
     control.close()
-    print("Destroying XsControl object.")
+    logger.log("Destroying XsControl object.")
     xda.XsControl.destruct(control)
 
 
-def checkConnectedSensors(devIdAll, children, control, device, Ports):
+def checkConnectedSensors(devIdAll, children, control, device, Ports, logger):
     """Verifies the connectivity of the MTw
     Parameters
     ----------
@@ -110,23 +110,23 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
             if children[i].connectivityState() == xda.XCS_Wireless:
                 childUsed[i] = True
 
-        print("\n Rejected devices: ")
+        logger.log("\n Rejected devices: ")
         rejects = np.array(devIdAll)[[not elem for elem in childUsed]].tolist()
         for i in range(len(rejects)):
             index = devIdAll.index(rejects[i])
             children[index].requestBatteryLevel()
             time.sleep(0.1)
-            print("%d - " % index + "%s" % rejects[i] + " || battery percentage: " + " %d" % children[
+            logger.log("%d - " % index + "%s" % rejects[i] + " || battery percentage: " + " %d" % children[
                 index].batteryLevel())
 
-        print("\n Accepted devices: ")
+        logger.log("\n Accepted devices: ")
         accepted = np.array(devIdAll)[childUsed].tolist()
         for acc in accepted:
             index = devIdAll.index(acc)
             mt = children[index]
             mt.requestBatteryLevel()
             time.sleep(0.1)
-            print("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % mt.batteryLevel())
+            logger.log("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % mt.batteryLevel())
 
         # option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
         # change = []
@@ -151,7 +151,7 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports):
     return devicesUsed, devIdUsed, nDevs
 
 
-def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate, savePath, maxBuffer):
+def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate, savePath, maxBuffer, logger):
     """Write readable txt files from pickle txt files and applies interpolation and quick fixes on missing packets
     Parameters
     ----------
@@ -213,13 +213,18 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
         packetCounter = removeResetCounter(packetCounter)
 
         # Interpolate missing data packets
-        packetCounter, acceleration, orientationMatrix = interpolateData(packetCounter, acceleration, orientationMatrix, timeOfArrival)
+        packetCounter, acceleration, orientationMatrix = interpolateData(packetCounter, acceleration, orientationMatrix,
+                                                                         timeOfArrival)
 
         # Make sure all packets start at the same packet counter
-        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketStart(packetCounter, acceleration, orientationMatrix, timeOfArrival, initialPacket)
+        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketStart(packetCounter, acceleration,
+                                                                                       orientationMatrix, timeOfArrival,
+                                                                                       initialPacket)
 
         # Make sure all packets end at the same packet counter
-        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketEnd(packetCounter, acceleration, orientationMatrix, timeOfArrival, finalPacket)
+        packetCounter, acceleration, orientationMatrix, timeOfArrival = setPacketEnd(packetCounter, acceleration,
+                                                                                     orientationMatrix, timeOfArrival,
+                                                                                     finalPacket)
 
         # Get number of interpolated data packets
         numberPackets = len(packetCounter)
@@ -259,8 +264,8 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
             file_txt.write("\n")
         file_txt.close()
 
-        print(devIdUsed[n], "Number of data packets: {} with {} packets interpolated, ({} %)".format(
-            len(packetCounter), packetsMissing, round(packetsMissing / len(packetCounter) * 100, 4)))
+        logger.log("{} Number of data packets: {} with {} packets interpolated, ({} %)".format(devIdUsed[n],
+                     len(packetCounter), packetsMissing, round(packetsMissing / len(packetCounter) * 100, 4)))
 
 
 def setPacketStart(packetCounter, acceleration, orientationMatrix, timeOfArrival, initialPacket):
@@ -364,7 +369,8 @@ def removeResetCounter(packetCounter, maxWrap=65535):
     return packetCounter
 
 
-def interpolateData(packetCounter: list, accelerationMatrix: list, orientationMatrix: list, timeOfArrival: list) -> [list, list, list, list]:
+def interpolateData(packetCounter: list, accelerationMatrix: list, orientationMatrix: list, timeOfArrival: list) -> [
+    list, list, list, list]:
     """QUICKFIX to interpolate missing data packets
     Parameters
     ----------
@@ -390,14 +396,14 @@ def interpolateData(packetCounter: list, accelerationMatrix: list, orientationMa
             acc = np.mean([accelerationMatrix[i], accelerationMatrix[i + 1]], 0)
             orientation = np.mean([orientationMatrix[i], orientationMatrix[i + 1]], 0)
             t1 = datetime.datetime.strptime(timeOfArrival[i], '%Y/%m/%d %H:%M:%S.%f')
-            t2 = datetime.datetime.strptime(timeOfArrival[i+1], '%Y/%m/%d %H:%M:%S.%f')
-            t = (t1 + 0.5*(t2 - t1)).strftime('%Y/%m/%d %H:%M:%S.%f') # Compute mean timestamp
-            t = t[:-3] # datetime obj has precision to nanosec, but we stop at micro (3 digits instead of 6)
+            t2 = datetime.datetime.strptime(timeOfArrival[i + 1], '%Y/%m/%d %H:%M:%S.%f')
+            t = (t1 + 0.5 * (t2 - t1)).strftime('%Y/%m/%d %H:%M:%S.%f')  # Compute mean timestamp
+            t = t[:-3]  # datetime obj has precision to nanosec, but we stop at micro (3 digits instead of 6)
             # Insert them at the appropriate indices
             packetCounter.insert(i + 1, packetCounter[i] + 1)
             accelerationMatrix.insert(i + 1, acc)
             orientationMatrix.insert(i + 1, orientation)
-            timeOfArrival.insert(i+1, t)
+            timeOfArrival.insert(i + 1, t)
         i += 1
 
         if packetCounter[-1] - packetCounter[i] == 1:
@@ -451,7 +457,7 @@ class MTwCallback(xda.XsCallback):
 
     def onLiveDataAvailable(self, dev, packet):
         self.m_lock.acquire()
-        assert (packet is not 0)
+        # assert (packet is not 0)
         while len(self.m_packetBuffer) >= self.m_maxNumberOfPacketsInBuffer:
             self.m_packetBuffer.pop()
         self.m_packetBuffer.append(xda.XsDataPacket(packet))
@@ -468,7 +474,7 @@ class MTwCallback(xda.XsCallback):
         None.
         """
         self.m_lock.acquire()
-        assert (len(self.m_packetBuffer) > 0)
+        # assert (len(self.m_packetBuffer) > 0)
         oldest_packet = xda.XsDataPacket(self.m_packetBuffer.pop(0))
         with open(filename, "ab") as file_handle:
             pickle.dump((oldest_packet.packetCounter(), oldest_packet.calibratedAcceleration(),
@@ -478,28 +484,7 @@ class MTwCallback(xda.XsCallback):
         self.m_lock.release()
 
 
-def key_capture_thread(awinda):
-    """Thread that stops the recording loop for the MTw devices
-    Parameters
-    ----------
-    awinda : class XsDevice object
-        Object that stores all the functions of a XSens device
-    Returns
-    -------
-    None.
-    """
-    global keep_going
-    input("Press enter to stop recording... \n")
-    keep_going = False
-    print("Abort flushing operation...")
-    if not awinda.abortFlushing():
-        print("Failed to abort flushing operation.")
-    print("Stopping recording...\n")
-    if not awinda.stopRecording():
-        print("Failed to stop recording. Aborting.")
-
-
-def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
+def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize, logger):
     MTw_pickle = os.path.join(savePath, "MTw Pickle")
     if not os.path.isdir(MTw_pickle):
         os.mkdir(MTw_pickle)
@@ -507,15 +492,15 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
 
     # Extract the XsDeviceApi version used
 
-    print("Creating a XsControl object...")
+    logger.log("Creating a XsControl object...")
     controlDev = xda.XsControl_construct()
-    assert (controlDev is not 0)
+    # assert (controlDev is not 0)
 
     xdaVersion = xda.XsVersion()
     xda.xdaVersion(xdaVersion)
-    print("Using the following XDA version: %s \n" % xdaVersion.toXsString())
+    logger.log("Using the following XDA version: %s \n" % xdaVersion.toXsString())
 
-    print("Detecting ports...\n")
+    logger.log("Detecting ports...\n")
     ports_Scan = xda.XsScanner_scanPorts(0, 100, True, True)
 
     # Detecting an awinda station
@@ -529,12 +514,12 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
         raise RuntimeError("Abort. No devices where detected.")
 
     devId = Ports.deviceId()
-    print(" Found awinda station with: ")
-    print(" Device ID: %s" % devId.toXsString())
-    print(" Port name: %s" % Ports.portName())
-    print(" Port baudrate: %s" % Ports.baudrate())
+    logger.log(" Found awinda station with: ")
+    logger.log(" Device ID: %s" % devId.toXsString())
+    logger.log(" Port name: %s" % Ports.portName())
+    logger.log(" Port baudrate: %s" % Ports.baudrate())
 
-    print("Opening port...")
+    logger.log("Opening port...")
     if not controlDev.openPort(Ports.portName(), Ports.baudrate()):
         raise RuntimeError("Could not open port. Aborting")
 
@@ -542,11 +527,11 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
     awinda = controlDev.device(devId)
     firmware_version = awinda.firmwareVersion()
 
-    assert (awinda is not 0)
-    print("Device: %s, with ID: %s open. \n" % (awinda.productCode(), awinda.deviceId().toXsString()))
+    # assert (awinda is not 0)
+    logger.log("Device: %s, with ID: %s open. \n" % (awinda.productCode(), awinda.deviceId().toXsString()))
 
     # Put the device in configuration mode
-    print("Putting device into configuraiton mode...\n")
+    logger.log("Putting device into configuraiton mode...\n")
     if not awinda.gotoConfig():
         raise RuntimeError("Could not put device into configuration mode. Aborting.")
 
@@ -559,30 +544,28 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
     """
     awinda.setOptions(xda.XSO_Orientation + xda.XSO_Calibrate + xda.XSO_RetainLiveData, 0)
 
-    print("Creating a log file...")
+    logger.log("Creating a log file...")
     if awinda.createLogFile(logFileName) != xda.XRV_OK:
         raise RuntimeError("Failed to create a log file. Aborting.")
     else:
-        print("Created a log file: %s" % logFileName)
+        logger.log("Created a log file: %s" % logFileName)
 
     # Implementing the update rate selected by the user
-    print("Update rate chosen: ", updateRate, "\n")
+    logger.log("Update rate chosen: {} \n".format(updateRate))
 
     if not awinda.setUpdateRate(updateRate):
         raise RuntimeError("Could not set up the update rate. Aborting.")
 
     # Implementing the chosen radio channel
-    print("Radio channel chosen: ", radioChannel, "\n")
+    logger.log("Radio channel chosen: {} \n".format(radioChannel))
 
     try:
         awinda.enableRadio(radioChannel)
     except ValueError:
-        print("The radio is still active, please undock the device from the computer and try again.")
+        logger.log("The radio is still active, please undock the device from the computer and try again.")
 
-    # input('\n Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds), '
-    #       'then press enter... \n')
-    print("Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds)")
-    # time.sleep(10)
+    logger.log("Undock the MTw devices from the Awinda station and wait until the devices are connected (synced leds)")
+
     # Attaching XsDevice objects to each MTw wireless connected to the awinda station
     MTws = awinda.children()
 
@@ -599,7 +582,7 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
         mtwCallbacks.append(MTwCallback(maxBufferSize))
         MTws[i].addCallbackHandler(mtwCallbacks[i])  # add callback to handle data transmission to each MTw
 
-    devicesUsed, devIdUsed, nDevs = checkConnectedSensors(devIdAll, MTws, controlDev, awinda, Ports)
+    devicesUsed, devIdUsed, nDevs = checkConnectedSensors(devIdAll, MTws, controlDev, awinda, Ports, logger)
 
     # Create pickle txt files for each MTw connected
     for n in range(nDevs):
@@ -608,19 +591,19 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize):
         open(filenamesPCKL[-1], 'wb')
 
     # Put devices to measurement mode
-    print("Putting devices into measurement mode...\n")
+    logger.log("Putting devices into measurement mode...\n")
 
     if not awinda.gotoMeasurement():
         raise RuntimeError("Could not put device into measurement mode. Aborting.")
 
     # Wait period to let the filters of the devices warm up before acquiring data
-    print("Wait 10 seconds before starting data acquisition. XSens filters are warming up... \n")
+    logger.log("Wait 10 seconds before starting data acquisition. XSens filters are warming up... \n")
     time.sleep(10)
-    print("IMUs are ready.\n")
+    logger.log("IMUs are ready.\n")
     # Reset the yaw (XRM_Heading), pitch and roll (XRM_Alignment) angles to 0
     for n in range(nDevs):
         if not devicesUsed[n].resetOrientation(xda.XRM_Heading + xda.XRM_Alignment):
-            print("Could not reset the header.")
+            logger.log("Could not reset the header.")
 
     if not awinda.startRecording():
         raise RuntimeError("Failed to start recording. Aborting.")
