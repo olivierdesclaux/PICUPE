@@ -79,7 +79,6 @@ def findClosestMatch(rgbTime, flirTime, windowSize=200):
 
     keys = list(rgbToFlirMap)
     vals = list(rgbToFlirMap)
-    for key in
 
     return rgbToFlirMap
 
