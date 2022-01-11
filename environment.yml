@@ -4,6 +4,7 @@ channels:
   - defaults
   - conda-forge
   - anaconda
+  - numba
 
 dependencies:
   - python=3.8
@@ -15,6 +16,7 @@ dependencies:
   - typing_extensions
   - jupyter
   - pythonnet
+  - numba
   - pip
   - pip:
     - opencv-python
