@@ -1,13 +1,10 @@
-from datetime import datetime
 import os
 import time
 
 import cv2
 import numpy as np
-import pyk4a as k4a
 from PIL import Image
-import extractDepth
-import numba as nb
+
 
 def kinectRGBWriter(kinectRGBQueue, savePath, keepGoing, kinectRGBQueueSize):
     cnt = 0

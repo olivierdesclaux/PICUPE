@@ -6,11 +6,11 @@ import argparse
 
 
 def visualizeResults(dataPath):
-    newSavePath = os.path.join(os.path.join(r"/sandbox/results", dataPath))
+    newSavePath = os.path.join(os.path.join(r"../sandbox/results", dataPath))
     savePathDepth = os.path.join(newSavePath, "depth")
     savePathRGB = os.path.join(newSavePath, "rgb")
     savePathWebcam = os.path.join(newSavePath, "flir")
-    savePathXSens = os.path.join(newSavePath, "XSens")
+    savePathXSens = os.path.join(newSavePath, "../XSens")
     rgb = multiprocessing.Process(target=viz, args=(savePathRGB, "RGB"))
     depth = multiprocessing.Process(target=viz, args=(savePathDepth, "Depth"))
     webcam = multiprocessing.Process(target=viz, args=(savePathWebcam, "Webcam"))

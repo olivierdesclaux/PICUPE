@@ -8,16 +8,13 @@ from PIL import Image
 import msvcrt
 import xsensdeviceapi as xda
 import argparse
-from multiprocessing import Process
-
 
 sys.path.append('./Python-Recalage')
 sys.path.append('./XSens')
 
 import videostream
-import extractDepth
+from utils import extractDepth
 import MTwFunctions as mtw
-from MTwFunctions import key_capture_thread
 
 
 class ImageSaver:
@@ -66,9 +63,6 @@ def initLogging(savePath):
 
 
 def writeXsens(mtwCallbacks, filenamesPCKL):
-    # for i in range(len(mtwCallbacks)):
-    #     callback = mtwCallbacks[i]
-    #     filenamePCKL = filenamesPCKL[i]
     for callback, filenamePCKL in zip(mtwCallbacks, filenamesPCKL):
         if callback.packetAvailable():
             callback.writeData(filenamePCKL)

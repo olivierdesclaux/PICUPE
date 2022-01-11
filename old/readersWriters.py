@@ -1,28 +1,35 @@
 from datetime import datetime
 import os
 import time
-
-import cv2
+import sys
+import cv2.cv2 as cv2
 import numpy as np
 import pyk4a as k4a
-from PIL import Image
-import extractDepth
+from utils import extractDepth
 import numba as nb
+import MTwFunctions as mtw
+
+sys.path.append('../sandbox')
+import myLogger
 
 
 ########################################################################################################################
 ############################################### WEBCAM #################################################################
 ########################################################################################################################
 
-def webcamReader(portNum, queue_from_cam, keepGoing, webcamQueueSize, cameraStatus):
-    webcam = cv2.VideoCapture(portNum)
-    # webcam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
-    cameraStatus[0] = 1
-
+def webcamReader(portNum, queue_from_cam, keepGoing, webcamQueueSize, cameraStatus, loggerQueue):
+    try:
+        webcam = cv2.VideoCapture(portNum)
+        # webcam = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        cameraStatus[0] = 1
+    except Exception as e:
+        myLogger.log(loggerQueue, "Failed to open webcam")
+        sys.exit()
     while np.sum(cameraStatus) < len(cameraStatus):
         continue
 
-    print("Webcam is Recording...")
+    # print("Webcam is Recording...")
+    myLogger.log(loggerQueue, "Webcam is Recording...")
     t1 = time.time()
     timestamp = datetime.now()
     ret, oldFrame = webcam.read()
@@ -48,12 +55,12 @@ def webcamReader(portNum, queue_from_cam, keepGoing, webcamQueueSize, cameraStat
 
     webcam.release()
     cv2.destroyAllWindows()
-    print("Finished Webcam acquisition. Put {} frames in the queue".format(cnt))
-    print("Webcam acquisition lasted {}s".format(round(t, 3)))
-    print("Overall Webcam FPS: {}".format(round(cnt / t, 3)))
+    myLogger.log(loggerQueue, "Finished Webcam acquisition. Put {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Webcam acquisition lasted {}s".format(round(t, 3)))
+    myLogger.log(loggerQueue, "Overall Webcam FPS: {}".format(round(cnt / t, 3)))
 
 
-def webcamWriter(webcamQueue, savePath, keepGoing, webcamQueueSize):
+def webcamWriter(webcamQueue, savePath, keepGoing, webcamQueueSize, loggerQueue):
     cnt = 0  # Initialise counter. Images will have name 00000, 00001, 00002
     textFile = open(os.path.join(savePath, "timestamps.txt"), "a")
     while True:
@@ -73,24 +80,30 @@ def webcamWriter(webcamQueue, savePath, keepGoing, webcamQueueSize):
             else:
                 break
     textFile.close()
-    print("Finished Webcam writing. Grabbed {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Finished Webcam writing. Grabbed {} frames in the queue".format(cnt))
 
 
 ########################################################################################################################
 ############################################### KINECT #################################################################
 ########################################################################################################################
 
-def kinectReader(kinectRGBQueue, kinectDepthQueue, keepGoing, kinectRGBQueueSize, kinectDepthQueueSize, cameraStatus):
-    kinect = k4a.PyK4A(k4a.Config(
-        color_resolution=k4a.ColorResolution.RES_720P,
-        depth_mode=k4a.DepthMode.NFOV_UNBINNED,
-        camera_fps=k4a.FPS.FPS_30,
-        synchronized_images_only=True, ))
-    kinect.start()
-    cameraStatus[1] = 1
+def kinectReader(kinectRGBQueue, kinectDepthQueue, keepGoing, kinectRGBQueueSize, kinectDepthQueueSize, cameraStatus,
+                 loggerQueue):
+    try:
+        kinect = k4a.PyK4A(k4a.Config(
+            color_resolution=k4a.ColorResolution.RES_720P,
+            depth_mode=k4a.DepthMode.NFOV_UNBINNED,
+            camera_fps=k4a.FPS.FPS_30,
+            synchronized_images_only=True, ))
+        kinect.start()
+        cameraStatus[1] = 1
+    except Exception as e:
+        myLogger.log(loggerQueue, "Failed to open Kinect")
+        sys.exit()
+
     while np.sum(cameraStatus) < len(cameraStatus):
         continue
-    print("Kinect is Recording...")
+    myLogger.log(loggerQueue, "Kinect is Recording...")
     t1 = time.time()
     timestamp = datetime.now()
     oldFrame = kinect.get_capture()
@@ -118,12 +131,12 @@ def kinectReader(kinectRGBQueue, kinectDepthQueue, keepGoing, kinectRGBQueueSize
     t = time.time() - t1
     kinect.stop()
 
-    print("Finished Kinect acquisition. Put {} frames in the queue".format(cnt))
-    print("Kinect acquisition lasted {}s".format(round(t, 3)))
-    print("Overall Kinect FPS: {}".format(round(cnt / t, 3)))
+    myLogger.log(loggerQueue, "Finished Kinect acquisition. Put {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Kinect acquisition lasted {}s".format(round(t, 3)))
+    myLogger.log(loggerQueue, "Overall Kinect FPS: {}".format(round(cnt / t, 3)))
 
 
-def kinectRGBWriter(kinectRGBQueue, savePath, keepGoing, kinectRGBQueueSize):
+def kinectRGBWriter(kinectRGBQueue, savePath, keepGoing, kinectRGBQueueSize, loggerQueue):
     cnt = 0  # Initialise counter. Images will have name 00000, 00001, 00002
     textFile = open(os.path.join(savePath, "timestamps.txt"), "a")
     while True:
@@ -145,10 +158,10 @@ def kinectRGBWriter(kinectRGBQueue, savePath, keepGoing, kinectRGBQueueSize):
             else:
                 break
     textFile.close()
-    print("Finished RGB writing. Grabbed {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Finished RGB writing. Grabbed {} frames in the queue".format(cnt))
 
 
-def kinectDepthWriter(kinectDepthQueue, savePath, keepGoing, kinectDepthQueueSize):
+def kinectDepthWriter(kinectDepthQueue, savePath, keepGoing, kinectDepthQueueSize, loggerQueue):
     cnt = 0
     textFile = open(os.path.join(savePath, "timestamps.txt"), "a")
     while True:
@@ -169,25 +182,29 @@ def kinectDepthWriter(kinectDepthQueue, savePath, keepGoing, kinectDepthQueueSiz
             else:
                 break
     textFile.close()
-    print("Finished Depth writing. Grabbed {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Finished Depth writing. Grabbed {} frames in the queue".format(cnt))
 
 
 ########################################################################################################################
 ############################################### FLIR ###################################################################
 ########################################################################################################################
 
-def flirReader(portNum, queue_from_cam, keepGoing, flirQueueSize, cameraStatus):
-    flir = cv2.VideoCapture(portNum, cv2.CAP_DSHOW)
-    # flir = cv2.VideoCapture(1)
-    flir.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
-    flir.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
-    flir.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+def flirReader(portNum, queue_from_cam, keepGoing, flirQueueSize, cameraStatus, loggerQueue):
+    try:
+        flir = cv2.VideoCapture(portNum, cv2.CAP_DSHOW)
+        flir.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
+        flir.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+        flir.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+        cameraStatus[0] = 1
 
-    cameraStatus[0] = 1
+    except Exception as e:
+        myLogger.log(loggerQueue, "Failed to open FLIR")
+        sys.exit()
+
     while np.sum(cameraStatus) < len(cameraStatus):
         continue
 
-    print("FLIR is Recording...")
+    myLogger.log(loggerQueue, "FLIR is Recording...")
     t1 = time.time()
     timestamp = datetime.now()
     ret, oldFrame = flir.read()
@@ -211,12 +228,12 @@ def flirReader(portNum, queue_from_cam, keepGoing, flirQueueSize, cameraStatus):
     t = time.time() - t1
     cv2.destroyAllWindows()
     flir.release()
-    print("Finished FLIR acquisition. Put {} frames in the queue".format(cnt))
-    print("FLIR acquisition lasted {}s".format(round(t, 3)))
-    print("Overall FLIR FPS: {}".format(round(cnt / t, 3)))
+    myLogger.log(loggerQueue, "Finished FLIR acquisition. Put {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "FLIR acquisition lasted {}s".format(round(t, 3)))
+    myLogger.log(loggerQueue, "Overall FLIR FPS: {}".format(round(cnt / t, 3)))
 
 
-def flirWriter(flirQueue, savePath, keepGoing, flirQueueSize):
+def flirWriter(flirQueue, savePath, keepGoing, flirQueueSize, loggerQueue):
     cnt = 0
     textFile = open(os.path.join(savePath, "timestamps.txt"), "a")
     while True:
@@ -236,7 +253,48 @@ def flirWriter(flirQueue, savePath, keepGoing, flirQueueSize):
             else:
                 break
     textFile.close()
-    print("Finished FLIR writing. Grabbed {} frames in the queue".format(cnt))
+    myLogger.log(loggerQueue, "Finished FLIR writing. Grabbed {} frames in the queue".format(cnt))
+
+########################################################################################################################
+############################################### XSENS ##################################################################
+########################################################################################################################
+
+
+def xsensReaderWriter(nIMUs, keepGoing, systemStatus, savePathXsens, loggerQueue):
+    XSupdateRate = 60
+    XSradioChannel = 13
+    maxBufferSize = 5
+    awinda, mtwCallbacks, filenamesPCKL, devId, devIdUsed, nDevs, firmware_version, controlDev, Ports = mtw.initialiseAwinda(
+        nIMUs,
+        XSupdateRate,
+        XSradioChannel,
+        savePathXsens, maxBufferSize, loggerQueue)
+    systemStatus[2] = 1
+    while np.sum(systemStatus) < len(systemStatus):
+        continue
+
+    myLogger.log(loggerQueue, "XSens is Recording")
+    while keepGoing.value:  # As long as the acquisition goes on !
+        mtw.writeXsens(mtwCallbacks, filenamesPCKL)
+
+    if not awinda.abortFlushing():
+        myLogger.log(loggerQueue, "Failed to abort flushing operation.")
+    myLogger.log(loggerQueue, "Stopping XSens recording...\n")
+    if not awinda.stopRecording():
+        myLogger.log(loggerQueue, "Failed to stop recording. Aborting.")
+
+    # Writing the data from a pickle txt file to a readable txt file
+    myLogger.log(loggerQueue, "Writing XSens PICKLE data to .txt ... \n")
+    mtw.pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenamesPCKL, XSupdateRate, savePathXsens,
+                   maxBufferSize, loggerQueue)
+
+    myLogger.log(loggerQueue, "\n Closing XSens log file...")
+    if not awinda.closeLogFile():
+        error = RuntimeError("Failed to close log file. Aborting.")
+        myLogger.log(loggerQueue, str(error))
+        raise error
+    myLogger.log(loggerQueue, "Exiting program...")
+    mtw.stopAll(awinda, controlDev, Ports)
 
 ###############################################################################################################
 ###############################################################################################################
