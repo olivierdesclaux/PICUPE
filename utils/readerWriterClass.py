@@ -5,11 +5,12 @@ import sys
 import cv2.cv2 as cv2
 import numpy as np
 import pyk4a as k4a
-from utils import extractDepth
+import extractDepth
 import numba as nb
+sys.path.append('../sandbox')
+sys.path.append("../XSens")
 import MTwFunctions as mtw
 
-sys.path.append('../sandbox')
 
 
 ########################################################################################################################
