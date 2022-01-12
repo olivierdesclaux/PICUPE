@@ -9,17 +9,27 @@ from utils.process import Process, monitorProcesses
 from calibrate import calibrateCamera
 from stereocalibration import stereoCalibrate, rectify
 from utils.readerWriterClass import *
-
+import utils.gui as gui
 
 
 def main(args):
     logger = None  # Initialise logger object
     procs = []  # Initialise list of processes that will be used
     try:
-        nIMU = args['nIMU']
+        # Launch GUI to retreive user input
+        guiConfig = gui.main()
+
+        IMUs = guiConfig["IMUs"]
+        nIMU =len(IMUs)
+        # nIMU = args['nIMU']
+
+        saveName = guiConfig["Experiment Name"]
+        # saveName = args["saveName"]
+
+        calibrationFile = guiConfig["Calibration Directory"]
+        # calibrationFile = args["calibrationFile"]
+
         FLIR = args['FLIR']
-        saveName = args["saveName"]
-        calibrationFile = args["calibrationFile"]
         calibInitialGrids = args["calibInitialGrids"]
         calibMinGrids = args["calibMinGrids"]
         kinectCalib = args["kinectCalib"]
