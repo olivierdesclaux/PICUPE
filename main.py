@@ -9,7 +9,7 @@ from utils.process import Process, monitorProcesses
 from calibrate import calibrateCamera
 from stereocalibration import stereoCalibrate, rectify
 from utils.readerWriterClass import *
-import utils.gui as gui
+import gui.gui as gui
 
 
 def main(args):
@@ -20,7 +20,6 @@ def main(args):
         guiConfig = gui.main()
 
         IMUs = guiConfig["IMUs"]
-        nIMU =len(IMUs)
         # nIMU = args['nIMU']
 
         saveName = guiConfig["Experiment Name"]
@@ -119,7 +118,7 @@ def main(args):
         writerProcesses.extend([kinectRGBWriterProcess, kinectDepthWriterProcess])
 
         # # # # # # # # # # # # # XSENS # # # # # # # # # # # # # # # # # # # # # #
-        xsens = XSens(nIMU, keepGoing, systemStatus, savePathXsens, logger)
+        xsens = XSens(IMUs, keepGoing, systemStatus, savePathXsens, logger)
 
         XsensProcess = Process("Xsens", logger, xsens, target=xsens.readAndWrite)
         # XsensProcess = Process("Xsens", logger, xsens, target=readAndWrite, args=(xsens,))

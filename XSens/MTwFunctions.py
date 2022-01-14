@@ -11,47 +11,36 @@ from threading import Lock
 sys.path.append("../sandbox")
 import myLogger
 
+IMUMappings = {
+    'HAND_L': '00B48784',
+    'fARM_L': '00B487B6',
+    'SHOU':'00B48760',
+    'FOOT':'00B48761',
+    'fARM_R': '00B4876D',
+    'HAND_R': '00B4875D',
+    'PELV': '00B48772',
+    'PROP 1': '00B487B7',
+    'uLEG_R':'00B4876F',
+    'uARM_L': '00B4875C',
+    'uARM_R': '00B48770',
+    'STERN': '00B4875B',
+    'uLEG_L': '00B48773',
+    'LLEG_L': '00B48769',
+    'LLEG_R': '00B4876C',
+    'FOOT_L': '00B48768',
+    'HEAD': '00B48765',
+    'SHOU_L': '00B4876E',
+    'Head': '00B43B4B',
+    'Torso': '00B43CC1'
+}
 
-class MTwIdentifier:
-    def __init__(self, ID):
-        self.ID = ID
-        if ID == '00B48784':
-            self.label = 'HAND_L'
-        elif ID == '00B487B6':
-            self.label = 'fARM_L'
-        elif ID == '00B48760':
-            self.label = 'SHOU'
-        elif ID == '00B48761':
-            self.label = 'FOOT'
-        elif ID == '00B4876D':
-            self.label = 'fARM_R'
-        elif ID == '00B4875D':
-            self.label = 'HAND_R'
-        elif ID == '00B48772':
-            self.label = 'PELV'
-        elif ID == '00B487B7':
-            self.label = 'PROP 1'
-        elif ID == '00B4876F':
-            self.label = 'uLEG_R'
-        elif ID == '00B4875C':
-            self.label = 'uARM_L'
-        elif ID == '00B48770':
-            self.label = 'uARM_R'
-        elif ID == '00B4875B':
-            self.label = 'STERN'
-        elif ID == '00B48773':
-            self.label = 'uLEG_L'
-        elif ID == '00B48769':
-            self.label = 'LLEG_L'
-        elif ID == '00B4876C':
-            self.label = 'LLEG_R'
-        elif ID == '00B48768':
-            self.label = 'FOOT_L'
-        elif ID == '00B48765':
-            self.label = 'HEAD'
-        elif ID == '00B4876E':
-            self.label = 'SHOU_L'
+def name2Adress(imuName):
+    return IMUMappings[imuName]
 
+def adress2Name(imuAdress):
+    for imuName in IMUMappings.keys():
+        if IMUMappings[imuName] == imuAdress:
+            return imuName
 
 def stopAll(device, control, Ports, logger):
     """Quits program cleanly and closes all ports of XSens devices
@@ -128,19 +117,6 @@ def checkConnectedSensors(devIdAll, children, control, device, Ports, logger):
             time.sleep(0.1)
             logger.log("%d - " % index + "%s" % accepted[i] + " || battery percentage: " + " %d" % mt.batteryLevel())
 
-        # option = str(input('Keep current status?' + ' (y/n): ')).lower().strip()
-        # change = []
-        # if option[0] == 'n':
-        #     op2 = input(
-        #         "\n Type the numbers of the sensors (csv list, e.g. 1,2,3) from which status should be changed \n (if accepted than reject or the other way around):\n")
-        #     change = [int(i) for i in re.split(",", op2)]
-        #     for i in range(len(change)):
-        #         if devIdAll[change[i]]:
-        #             device.rejectConnection(children[change[i]])
-        #             childUsed[change[i]] = False
-        #         else:
-        #             device.acceptConnection(children[change[i]])
-        #             childUsed[change[i]] = True
         if sum(childUsed) == 0:
             stopAll(device, control, Ports)
             raise RuntimeError("No MTw devices found. Aborting.")
@@ -242,7 +218,9 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
         file_txt.write("// Firmware Version: " + str(firmware_version.toXsString()) + "\n")
         file_txt.write("// Option Flags: AHS Disabled ICC Disabled \n")
         file_txt.write(
-            "packetCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3][1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
+            "packetCounter\tSampleTimeFine\tYear\tMonth\tDay\tSecond\tUTC_Nano\tUTC_Year\tUTC_Month\tUTC_Day"
+            "\tUTC_Hour\tUTC_Minute\tUTC_Second\tUTC_Valid\tAcc_X\tAcc_Y\tAcc_Z\tMat[1][1]\tMat[2][1]\tMat[3]["
+            "1]\tMat[1][2]\tMat[2][2]\tMat[3][2]\tMat[1][3]\tMat[2][3]\tMat[3][3] \n")
 
         for i in range(len(packetCounter)):
             file_txt.write(str(packetCounter[i]) + "\t\t\t\t\t\t\t\t")
@@ -265,7 +243,9 @@ def pickle2txt(devId, devIdUsed, nDevs, firmware_version, filenames, updateRate,
         file_txt.close()
 
         logger.log("{} Number of data packets: {} with {} packets interpolated, ({} %)".format(devIdUsed[n],
-                     len(packetCounter), packetsMissing, round(packetsMissing / len(packetCounter) * 100, 4)))
+                                                                                               len(packetCounter),
+                                                                                               packetsMissing, round(
+                packetsMissing / len(packetCounter) * 100, 4)))
 
 
 def setPacketStart(packetCounter, acceleration, orientationMatrix, timeOfArrival, initialPacket):
@@ -484,7 +464,7 @@ class MTwCallback(xda.XsCallback):
         self.m_lock.release()
 
 
-def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize, logger):
+def initialiseAwinda(IMUs, updateRate, radioChannel, savePath, maxBufferSize, logger):
     MTw_pickle = os.path.join(savePath, "MTw Pickle")
     if not os.path.isdir(MTw_pickle):
         os.mkdir(MTw_pickle)
@@ -568,11 +548,40 @@ def initialiseAwinda(nIMUs, updateRate, radioChannel, savePath, maxBufferSize, l
 
     # Attaching XsDevice objects to each MTw wireless connected to the awinda station
     MTws = awinda.children()
+    MTwsAdresses = [MTws[i].deviceId().toXsString() for i in range(len(MTws))]  # Associated i.p. addresses of the IMUs
 
     # Waiting for all IMUs to be attached
-    while len(MTws) < nIMUs:
-        time.sleep(0.1)
-        MTws = awinda.children()
+    # 2 step process:
+    # 1.We wait for all IMUs in the "IMUs" variable to be contained in MTws
+    # 2. We then look in MTws to see of there are some IMUs that shouldn't be here, and remove them
+    foundAllImus = False
+    # Step 1
+    while not foundAllImus:
+        missingImus = []
+        for imu in IMUs:
+            imuAdress = name2Adress(imu)
+            if imuAdress in MTwsAdresses:
+                continue
+            else:
+                missingImus.append(imu)
+        if len(missingImus) > 0:
+            logger.log("Missing : {}".format(missingImus))
+            time.sleep(2)
+            MTws = awinda.children()
+            MTwsAdresses = [MTws[i].deviceId().toXsString() for i in range(len(MTws))]
+        else:
+            foundAllImus = True
+    # Step 2:
+    if len(MTws) > len(IMUs):
+        #     This means that at least one extra IMU is here that shouldn't
+        tempMTws = []
+        MTwsAdresses = [MTws[i].deviceId().toXsString() for i in range(len(MTws))]
+        for imuAdress, imu in zip(MTwsAdresses, MTws):
+            imuName = adress2Name(imuAdress)
+            if imuName in IMUs:  # We check that this IMU was really desired
+                tempMTws.append(imu)
+        MTws = tempMTws
+
 
     devIdAll = []
     mtwCallbacks = []
