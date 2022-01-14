@@ -296,8 +296,8 @@ class FLIR:
 ########################################################################################################################
 
 class XSens:
-    def __init__(self, nIMUs, keepGoing, systemStatus, savePath, logger):
-        self.nIMUs = nIMUs
+    def __init__(self, IMUs, keepGoing, systemStatus, savePath, logger):
+        self.IMUs = IMUs
         self.keepGoing = keepGoing
         self.systemStatus = systemStatus
         self.savePath = savePath
@@ -317,7 +317,7 @@ class XSens:
 
     def initialiseAwinda(self):
         awinda, mtwCallbacks, filenamesPCKL, devId, devIdUsed, nDevs, firmware_version, controlDev, Ports = mtw.initialiseAwinda(
-            self.nIMUs,
+            self.IMUs,
             self.updateRate,
             self.radioChannel,
             self.savePath, self.maxBufferSize, self.logger)
@@ -407,28 +407,42 @@ def initLogging(savePath):
 
 
 def findCameraPort(name):
+    # print("Searching for {}".format(name))
     if name == "webcam":
         targetShape = (480, 640, 3)
     elif name == "flir":
         targetShape = (768, 1024, 3)
     else:
-        raise Exception ("Wrong camera type specified")
+        raise Exception("Wrong camera type specified")
     cnt = 0
+    cam = None
     while True:
         try:
-            cam = cv2.VideoCapture(cnt)
+            cam = cv2.VideoCapture(cnt, cv2.CAP_DSHOW)
             ret, frame = cam.read()
             if not ret:
-                raise Exception("Couldn't find {} port".format(name))
+                cnt = -1
+                cam.release()
+                break
+                # raise Exception("Couldn't find {} port".format(name))
             elif frame.shape == targetShape:
+                cam.release()
                 break
             else:
+                cam.release()
                 cnt += 1
         except:
-            raise Exception("Couldn't find {} port. Went up to port: {}".format(name, cnt))
+            cnt = -1
+            print("Couldn't find {} port.".format(name))
+            break
+            # raise Exception("Couldn't find {} port. Went up to port: {}".format(name, cnt))
     cv2.destroyAllWindows()
-    cam.release()
-
+    if cam:
+        cam.release()
+    if cnt > -1:
+        print("Found {}".format(name))
+    else:
+        print("Couldn't find {}".format(name))
     return cnt
 
 
