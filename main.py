@@ -1,15 +1,15 @@
 import argparse
 import msvcrt
 import multiprocessing
-import shutil
+# import shutil
 import traceback
-from utils.myLogger import Logger, createSaveDirectories
+from utils.myLogger import Logger, createSaveDirectories, copyCalibrationFiles
 import threading
 from utils.process import Process, monitorProcesses
-from calibrate import calibrateCamera
-from stereocalibration import stereoCalibrate, rectify
+# from calibrate import calibrateCamera
+# from stereocalibration import stereoCalibrate, rectify
 from utils.readerWriterClass import *
-import gui.gui as gui
+import gui.guiMain as gui
 
 
 def main(args):
@@ -25,45 +25,50 @@ def main(args):
         saveName = guiConfig["Experiment Name"]
         # saveName = args["saveName"]
 
-        calibrationFile = guiConfig["Calibration Directory"]
-        # calibrationFile = args["calibrationFile"]
+        calibrationDir = guiConfig["Calibration Directory"]
+        # calibrationDir = args["calibrationDir"]
 
-        FLIR = args['FLIR']
-        calibInitialGrids = args["calibInitialGrids"]
-        calibMinGrids = args["calibMinGrids"]
-        kinectCalib = args["kinectCalib"]
-        stereocalibInitialGrids = args["stereocalibInitialGrids"]
-        if calibrationFile != "" and (not os.path.isdir(calibrationFile)):
-            raise Exception("Invalid calibration directory.")
-        resultsDir = args["resultsDir"]
+        resultsDir = guiConfig["Results Directory"]
+        # resultsDir = args["resultsDir"]
+        useFLIR = args['FLIR']
+        useFLIR = False
+        # calibInitialGrids = args["calibInitialGrids"]
+        # calibMinGrids = args["calibMinGrids"]
+        # kinectCalib = args["kinectCalib"]
+        # stereocalibInitialGrids = args["stereocalibInitialGrids"]
+        # if calibrationDir != "" and (not os.path.isdir(calibrationDir)):
+        #     raise Exception("Invalid calibration directory.")
+
 
         # # # # # # # # # # # # # # # # # # LOGGER # # # # # # # # # # # # # # # # # # # # # # # # # # # #
         newSavePath, savePathRGB, savePathDepth, savePathFlir, savePathXsens, savePathCalib = createSaveDirectories(
             resultsDir,
             saveName)
+        copyCalibrationFiles(calibrationDir, savePathCalib)
         logger = Logger(newSavePath, "customLog.log")
         listener = threading.Thread(target=logger.logWriter, daemon=True)
         listener.start()
 
-        # # #  # # # # # # # # # # CALIBRATION # # # # # # # # # # # # # # # #
-        if calibrationFile == '':
-            # No calibration file is specified, this means we are going to do calibration and stereocalibration all over
-            # again.
-            flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
-            flirCalib = calibrateCamera("F", savePathCalib, flirCalibFlags, initialNumGrids=calibInitialGrids,
-                                        minNumGrids=calibMinGrids)
-
-            stereoFlags = cv2.CALIB_FIX_INTRINSIC
-            stereoCalibrationFile = stereoCalibrate("FK", flirCalib, kinectCalib, savePathCalib, stereoFlags,
-                                                    initialNumGrids=stereocalibInitialGrids)
-            # stereoCalibrationFile = stereoCalibrate("KF", kinectCalib, flirCalib, savePathCalib, stereoFlags,
-            #                                         initialNumGrids=20)
-
-            # Compute rectification matrices
-            rectify(savePathCalib)
-        else:
-            shutil.copytree(calibrationFile, savePathCalib, dirs_exist_ok=True)
-            logger.log("Copying calibration files... \n")
+        # # # #  # # # # # # # # # # CALIBRATION # # # # # # # # # # # # # # # #
+        # if calibrationDir == '':
+        #     # No calibration file is specified, this means we are going to do calibration and stereocalibration all over
+        #     # again.
+        #     flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
+        #     flirCalib = calibrateCamera("F", savePathCalib, flirCalibFlags, initialNumGrids=calibInitialGrids,
+        #                                 minNumGrids=calibMinGrids)
+        #
+        #     stereoFlags = cv2.CALIB_FIX_INTRINSIC
+        #     stereoCalibrationFile = stereoCalibrate("FK", flirCalib, kinectCalib, savePathCalib, stereoFlags,
+        #                                             initialNumGrids=stereocalibInitialGrids)
+        #     # stereoCalibrationFile = stereoCalibrate("KF", kinectCalib, flirCalib, savePathCalib, stereoFlags,
+        #     #                                         initialNumGrids=20)
+        #
+        #     # Compute rectification matrices
+        #     rectify(savePathCalib)
+        # else:
+        #     copyCalibrationFiles(calibrationDir, savePathCalib)
+        #     # shutil.copytree(calibrationDir, savePathCalib, dirs_exist_ok=True)
+        #     logger.log("Copying calibration files... \n")
 
         logger.log("Initialising processes... \n \n")
         readerProcesses = []
@@ -81,7 +86,7 @@ def main(args):
         # Webcam Queue
         webcamQueue = multiprocessing.Queue()
         # Webcam Process
-        if not FLIR:
+        if not useFLIR:
             webcamPort = findCameraPort("webcam")
             webcam = Webcam(webcamPort, webcamQueue, keepGoing, webcamQueueSize, systemStatus, logger,
                             savePathFlir)
@@ -121,7 +126,6 @@ def main(args):
         xsens = XSens(IMUs, keepGoing, systemStatus, savePathXsens, logger)
 
         XsensProcess = Process("Xsens", logger, xsens, target=xsens.readAndWrite)
-        # XsensProcess = Process("Xsens", logger, xsens, target=readAndWrite, args=(xsens,))
         readerProcesses.append(XsensProcess)
 
         # Start the processes
@@ -131,7 +135,7 @@ def main(args):
             proc.start()
 
         # Start monitoring processes
-        procs = readerProcesses + writerProcesses
+        # procs = readerProcesses + writerProcesses
         # threading.Thread(target=monitorProcesses, args=(procs,))
 
         while True:  # Wait for all processes to finish initialisation
@@ -197,11 +201,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--nIMU', type=int, dest='nIMU',
                         help='Select a number of IMUs for your experiment',
-                        required=True)
+                        required=False)
     parser.add_argument('--FLIR', type=bool, dest='FLIR',
                         help='Select if you want to work with FLIR or Webcam',
                         required=False, default=False)
-    parser.add_argument('--calibFile', type=str, dest='calibrationFile', help="Path to the calibration directory",
+    parser.add_argument('--calibDir', type=str, dest='calibrationDir', help="Path to the calibration directory",
                         required=False, default='')
     parser.add_argument('--saveName', type=str, dest='saveName', help="Select experiment name", required=False,
                         default=datetime.now().strftime("%Y-%m-%d_%H-%M"))
