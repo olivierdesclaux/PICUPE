@@ -2,8 +2,12 @@ import sys
 import os
 import tkinter as tk
 from tkinter import ttk
-from experimentFrame import experimentFrame
-from calibFrame import calibFrame
+# from experimentFrame import experimentFrame
+# from calibFrame import calibFrame
+# from IMUFrame import IMUFrame
+# from cameraFrame import cameraFrame
+# import experimentFrame
+from gui.calibFrame import calibFrame
 from IMUFrame import IMUFrame
 from cameraFrame import cameraFrame
 
@@ -27,7 +31,7 @@ class Root(tk.Tk):
         self.saveButton = ttk.Button(self.summaryFrame, text="Save Config", command=self.saveConfig)
         self.saveButton.grid(row=1, column=1)
 
-        self.saveAndExitButton = ttk.Button(self.summaryFrame, text="Save and Exit", command=self.saveAndExit)
+        self.saveAndExitButton = ttk.Button(self.summaryFrame, text="Save and Launch", command=self.saveAndLaunch)
         self.saveAndExitButton.grid(row=1, column=2)
 
         self.abortButton = ttk.Button(self.summaryFrame, text="Abort", command=self.abortConfig)
@@ -36,14 +40,16 @@ class Root(tk.Tk):
     def abortConfig(self):
         sys.exit()
 
-    def saveAndExit(self):
+    def saveAndLaunch(self):
         self.saveConfig()
+        self.checkExperimentName()
+        self.checkCalibrationDir()
         self.destroy()
 
     def saveConfig(self):
         self.config["Experiment Name"] = self.experimentFrame.getExpName()
         self.config["Results Directory"] = self.experimentFrame.saveDirVar.get()
-        self.config["Calibration Directory"] = self.calibFrame.directory
+        self.config["Calibration Directory"] = self.calibFrame.directory.get()
         self.config["IMUs"] = [imu for imu in self.imuFrame.IMUs if self.imuFrame.IMUs[imu].get() == 1]
         try:
             # Look if stereocalibration was performed. If so, we save the used stereocalibration hyperparameters.
@@ -53,6 +59,18 @@ class Root(tk.Tk):
         self.config["Calibration Parameters"] = calibConfig
         print(self.config)
 
+    def checkExperimentName(self):
+        self.saveConfig()
+        # if self.config == {}:
+        #     self.saveConfig()
+        if self.config["Experiment Name"] == "":
+            raise Exception("Experiment Name is blank")
+        if self.config["Experiment Name"] in os.listdir(self.config["Results Directory"]):
+            raise Exception("Experiment already exists")
+
+    def checkCalibrationDir(self):
+        if self.config["Calibration Directory"] == "":
+            raise Exception("No calibration directory specified")
 
 def main():
     os.environ["K4A_ENABLE_LOG_TO_STDOUT"] = "0"
