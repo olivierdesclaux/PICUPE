@@ -6,7 +6,7 @@ import sys
 import traceback
 import random
 import os
-
+import shutil
 
 class Logger:
     def __init__(self, savePath, name):
@@ -90,6 +90,31 @@ def createSaveDirectories(resultsDir, saveName):
 
     return newSavePath, savePathRGB, savePathDepth, savePathFlir, savePathXsens, savePathCalib
 
+def copyCalibrationFiles(calibDir, savePathCalib):
+    """
+    Copies calibration parameters from a previous experiment to the directory of the specified new experiment.
+    Checks that we are only copying the calibration files, and not the entire experiment data.
+    Parameters
+    ----------
+    calibDir: string, path to the experiment directory whose calibration parameters we want to copy
+    savePathCalib: string, path to the "calib" directory where we want to store the copied calibration parameters
+
+    Returns
+    -------
+    True, if succeeds. If calibration data is missing in the calibDir, raises an exception.
+
+    """
+    files = os.listdir(calibDir)
+    if ("calib" in files) and os.path.isdir(os.path.join(calibDir, "calib")):
+        calibDir = os.path.join(calibDir, "calib")
+    calibrationFiles = ['ErrorCharts.png', 'FCalib.json', 'Rectify.json', 'stereo.json', "calibParameters.json"]
+    if not set(calibrationFiles) == set(os.listdir(calibDir)):
+        for x in calibrationFiles:
+            if x not in os.listdir(calibDir):
+                raise Exception("Missing {} in specified calibration directory".format(x))
+        raise Exception("Specified calibration directory must contain exclusively {}".format(calibrationFiles))
+    else:
+        shutil.copytree(calibDir, savePathCalib, dirs_exist_ok=True)
 
 #
 # def main():
