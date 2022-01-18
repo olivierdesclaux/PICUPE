@@ -3,8 +3,9 @@ from tkinter import ttk
 
 
 class IMUFrame(ttk.LabelFrame):
-    def __init__(self, row, column, rowspan, columnspan):
+    def __init__(self, parent, row, column, rowspan, columnspan):
         super(IMUFrame, self).__init__(text="Selected IMUs")
+        self.parent = parent
         self.grid(column=column, row=row, rowspan=rowspan, columnspan=columnspan)
         self.IMUs = {"Head": tk.IntVar(),
                      "Torso": tk.IntVar(),
@@ -39,6 +40,15 @@ class IMUFrame(ttk.LabelFrame):
         for k, imu in enumerate(["Left Upper Leg", "Left Lower Leg", "Left Foot", "Right Upper Leg", "Right Lower Leg",
                                  "Right Foot"]):
             self.addCheckBox(self.legsFrame, imu, self.IMUs[imu], row=k // 3, col=k % 3)
+
+        self.checkButtonFrame = ttk.Frame(self)
+        self.checkButtonFrame.grid(row=3, column=0)
+        self.checkButton = ttk.Button(self.checkButtonFrame, text="Test IMU", command=self.testIMU)
+        self.checkButton.grid(row=0, column=0)
+
+    def testIMU(self):
+        selectedIMUs = [imu for imu in self.IMUs if self.IMUs[imu].get() == 1]
+
 
     def addCheckBox(self, frame, IMUName, IMUVar, row, col):
         box = tk.Checkbutton(frame, text=IMUName,

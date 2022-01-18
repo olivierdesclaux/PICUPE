@@ -6,10 +6,10 @@ from tkinter import ttk
 # from calibFrame import calibFrame
 # from IMUFrame import IMUFrame
 # from cameraFrame import cameraFrame
-# import experimentFrame
+from gui.experimentFrame import experimentFrame
 from gui.calibFrame import calibFrame
-from IMUFrame import IMUFrame
-from cameraFrame import cameraFrame
+from gui.IMUFrame import IMUFrame
+from gui.cameraFrame import cameraFrame
 
 
 class Root(tk.Tk):
@@ -20,10 +20,11 @@ class Root(tk.Tk):
         # self.wm_iconbitmap('icon.ico')
         self.experimentFrame = experimentFrame(self, row=0, column=0, rowspan=1, columnspan=1)
         self.calibFrame = calibFrame(self, row=8, column=0, rowspan=1, columnspan=1)
-        self.imuFrame = IMUFrame(row=1, column=0, rowspan=5, columnspan=1)
+        self.imuFrame = IMUFrame(self, row=1, column=0, rowspan=6, columnspan=1)
         self.cameraFrame = cameraFrame(row=0, column=1, rowspan=7, columnspan=2)
         self.makeSummaryFrame(row=8, column=1, rowspan=1, columnspan=1)
         self.config = {}
+        self.protocol("WM_DELETE_WINDOW", self.abortConfig)
 
     def makeSummaryFrame(self, row, column, rowspan, columnspan):
         self.summaryFrame = ttk.Frame(self)
@@ -44,6 +45,7 @@ class Root(tk.Tk):
         self.saveConfig()
         self.checkExperimentName()
         self.checkCalibrationDir()
+        self.checkIMUs()
         self.destroy()
 
     def saveConfig(self):
@@ -64,13 +66,21 @@ class Root(tk.Tk):
         # if self.config == {}:
         #     self.saveConfig()
         if self.config["Experiment Name"] == "":
-            raise Exception("Experiment Name is blank")
+            raise Exception("Experiment Name is blank.")
         if self.config["Experiment Name"] in os.listdir(self.config["Results Directory"]):
-            raise Exception("Experiment already exists")
+            raise Exception("Experiment already exists.")
 
     def checkCalibrationDir(self):
+        self.saveConfig()
         if self.config["Calibration Directory"] == "":
-            raise Exception("No calibration directory specified")
+            raise Exception("No calibration directory specified.")
+
+    def checkIMUs(self):
+        self.saveConfig()
+        if len(self.config["IMUs"]) == 0:
+            raise Exception("No IMUs were specified.")
+
+
 
 def main():
     os.environ["K4A_ENABLE_LOG_TO_STDOUT"] = "0"

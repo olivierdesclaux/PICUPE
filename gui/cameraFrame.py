@@ -9,8 +9,8 @@ from PIL import ImageTk
 import numpy as np
 import pyk4a as k4a
 sys.path.append("../utils")
-from readerWriterClass import findCameraPort
-import extractDepth
+from utils.readerWriterClass import findCameraPort
+from utils.extractDepth import colorize
 
 
 class cameraFrame(ttk.LabelFrame):
@@ -61,6 +61,7 @@ class cameraFrame(ttk.LabelFrame):
         self.button_frame = ttk.LabelFrame(self, text="On/Off")
         self.stop_button = ttk.Button(self.button_frame, text="Stop", command=self.stop)
         self.stop_button.grid(row=1, column=2)
+        self.stop_button["state"] = "disabled"
         self.start_button = ttk.Button(self.button_frame, text="Start", command=self.start)
         self.start_button.grid(row=1, column=1)
         self.view = ttk.Label(self, image=self.photo)
@@ -74,6 +75,8 @@ class cameraFrame(ttk.LabelFrame):
         self.thread = threading.Thread(target=self.videoLoop, args=())
         self.thread.daemon = True
         self.thread.start()
+        self.start_button["state"] = "disabled"
+        self.stop_button["state"] = "normal"
 
     def stop(self):
         self.queue.put(np.array(Image.new("RGB", (self.imageHeight, self.imageWidth), "white")))
@@ -81,6 +84,8 @@ class cameraFrame(ttk.LabelFrame):
             self.cap.stop()
             self.cap = None
         self.is_running = False
+        self.start_button["state"] = "normal"
+        self.stop_button["state"] = "disabled"
 
     def videoLoop(self):
         self.cap = camera(self.camVar.get(), self.webcamPortNum, self.flirPortNum)
@@ -154,6 +159,9 @@ class camera:
                 self.cam.start()
             elif self.name == "flir" and self.flirPort > -1:
                 self.cam = cv2.VideoCapture(self.flirPort, cv2.CAP_DSHOW)
+                self.cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
+                self.cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+                self.cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
             else:
                 print("Failed to open {}".format(self.name))
                 return False
@@ -167,7 +175,7 @@ class camera:
             return self.cam.get_capture().color
         elif self.name == "kinect depth":
             frame = self.cam.get_capture().transformed_depth
-            return extractDepth.colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
+            return colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
             # Have to convert from 16bit to 8bit for display
         elif self.name == "flir" or self.name == "webcam":
             _, frame = self.cam.read()

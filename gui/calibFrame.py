@@ -2,13 +2,14 @@ import sys
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
-
+import os
 import cv2.cv2 as cv2
+import json
+# sys.path.append("../Recalage")
+# sys.path.append("../utils")
+from Recalage.calibrate import calibrateCamera
+from Recalage.stereocalibration import stereoCalibrate, rectify
 
-sys.path.append("../Recalage")
-sys.path.append("../utils")
-from stereocalibration import stereoCalibrate, rectify
-from myLogger import createSaveDirectories
 
 class calibFrame(ttk.LabelFrame):
     def __init__(self, parent, row, column, rowspan, columnspan):
@@ -16,8 +17,10 @@ class calibFrame(ttk.LabelFrame):
         self.parent = parent
         self.grid(column=column, row=row, rowspan=rowspan, columnspan=columnspan)
         self.button = None
-        self.directory = None
-        self.label = ttk.Label(self, text="")
+        self.calibrationSaveDirectory = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Results\Calibration " \
+                                        r"Directories"
+        self.directory = tk.StringVar()
+        self.label = ttk.Label(self, textvariable=self.directory)
         self.label.grid(column=0, row=3, columnspan=3)
         self.browseButton = ttk.Button(self, text="Browse A Directory", command=self.calibDirDialog)
         self.browseButton.grid(column=0, row=0)
@@ -27,11 +30,16 @@ class calibFrame(ttk.LabelFrame):
         self.kinectCalibrationWindow = None
 
     def openCalibWindow(self):
+        self.parent.checkExperimentName()
         self.kinectCalibrationWindow = calibWindow(self)
 
     def calibDirDialog(self):
-        initialDir = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Results"
-        self.directory = filedialog.askdirectory(initialdir=initialDir, title="Select A Calibration Directory")
+        newDir = filedialog.askdirectory(initialdir=self.calibrationSaveDirectory,
+                                         title="Select A Calibration Directory")
+        self.directory.set(newDir)
+
+    def updateCalibDirectory(self):
+        print(self.directory)
         self.label = ttk.Label(self, text=self.directory)
         self.label.grid(column=0, row=3, columnspan=3)
         self.label.configure(text=self.directory)
@@ -60,7 +68,6 @@ class calibWindow(tk.Frame):
     def getConfigData(self):
         self.parent.calibConfig = self.config
         return self.config
-
 
     def makeStereoCalibFrame(self, row, column):
         self.stereoCalibFrame = ttk.LabelFrame(self.window, text="Stereo Calibration Parameters")
@@ -99,35 +106,38 @@ class calibWindow(tk.Frame):
     def launchCalib(self):
         print("Launching Calib")
         expName = self.parent.parent.experimentFrame.getExpName()
-        saveDir = self.parent.parent.experimentFrame.getSaveDir()
-        _, _, _, _, _, savePathCalib = createSaveDirectories(saveDir, expName)
+        # saveDir = self.parent.parent.experimentFrame.getSaveDir()
+        savePathCalib = createCalibDirectory(self.parent.calibrationSaveDirectory, expName)
         calibConfig = {
             "calibInitialGrids": self.calibInitialGrids.get(),
             "calibMinGrids": self.calibMinGrids.get(),
             "kinectCalib": self.kinectCalibFile.get(),
             "stereocalibInitialGrids": self.stereoCalibGrids.get()}
-        self.config = calibConfig
-        self.getConfigData()
-        return True
+        # self.config = calibConfig
+        #
         # Ne pas oublier de sauvegarder les résultats de calibration et d'updater le fichier dans calibFrame
         flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
         stereoFlags = cv2.CALIB_FIX_INTRINSIC
 
-
-        savePathCalib = ""
         calibConfig["flirCalib"] = calibrateCamera("F", savePathCalib, flirCalibFlags, initialNumGrids=calibConfig[
             "calibInitialGrids"], minNumGrids=calibConfig["calibMinGrids"])
 
         calibConfig["stereoCalibrationFile"] = stereoCalibrate("FK", calibConfig["flirCalib"], calibConfig[
             "kinectCalib"], savePathCalib, stereoFlags, initialNumGrids=calibConfig["stereocalibInitialGrids"])
 
-        # stereoCalibrationFile = stereoCalibrate("KF", kinectCalib, flirCalib, savePathCalib, stereoFlags,
-        #                                         initialNumGrids=20)
-
         # Compute rectification matrices
         rectify(savePathCalib)
+
+        # savePathCalib = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Results\Calibration Directories\test1\calib"
         self.calibConfig = calibConfig
 
+        with open(os.path.join(savePathCalib, "calibParameters.json"), 'w') as file:
+            json.dump(self.calibConfig, file, indent=4)
+
+        self.getConfigData()
+        self.parent.directory.set(savePathCalib)
+        # self.parent.updateCalibDirectory()
+        self.window.destroy()
 
     def makeKinectCalibFrame(self, row, column, columnspan):
         self.kinectFrame = ttk.LabelFrame(self.window, text="Kinect Calibration Parameters")
@@ -149,3 +159,15 @@ class calibWindow(tk.Frame):
         newKinectCalibFile = filedialog.askopenfilename(initialdir=initialDir, title="Select A Calibration Directory",
                                                         filetypes=[("json", ".json")])
         self.kinectCalibFile.set(newKinectCalibFile)
+
+
+def createCalibDirectory(resultsDir, saveName):
+    newSavePath = os.path.join(resultsDir, saveName)
+    savePathCalib = os.path.join(newSavePath, "calib")
+    if not os.path.isdir(newSavePath):
+        os.mkdir(newSavePath)
+        os.mkdir(savePathCalib)
+    else:
+        raise Exception("Specified saving parameters lead to an already existing directory.")
+
+    return savePathCalib

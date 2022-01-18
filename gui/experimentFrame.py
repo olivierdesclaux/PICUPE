@@ -15,8 +15,6 @@ class experimentFrame(ttk.LabelFrame):
         self.experimentName = None
         self.experimentNameEntry = tk.Entry(self, textvariable=self.expNameVar)
         self.experimentNameEntry.grid(row=1, column=1)
-        # self.expNameButton = ttk.Button(self, text="Ok", command=self.getExpName)
-        # self.expNameButton.grid(row=1, column=2)
         self.defaultNameButton = ttk.Button(self, text="Default", command=self.getDefaultName)
         self.defaultNameButton.grid(row=1, column=2)
 
