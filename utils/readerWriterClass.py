@@ -1,16 +1,13 @@
 from datetime import datetime
 import os
 import time
-import sys
 import cv2.cv2 as cv2
 import numpy as np
 import pyk4a as k4a
-import extractDepth
+from utils.extractDepth import colorize
 import numba as nb
-sys.path.append('../sandbox')
-sys.path.append("../XSens")
-import MTwFunctions as mtw
-
+import XSens.MTwFunctions as mtw
+from XSens.MTwManager import MTwManager
 
 
 ########################################################################################################################
@@ -29,7 +26,7 @@ class Webcam:
         self.cam = None
 
     def read(self):
-        cam = cv2.VideoCapture(self.portNum)
+        cam = cv2.VideoCapture(self.portNum, cv2.CAP_DSHOW)
         self.cam = cam
         self.cameraStatus[0] = 1
 
@@ -83,7 +80,8 @@ class Webcam:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
                 textFile.write("{}\n".format(timestamp))  # Add timestamp to the .txt file
                 cnt += 1
-                with self.webcamQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment by the reader
+                with self.webcamQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment by
+                    # the reader
                     self.webcamQueueSize.value -= 1  # Decrement the queue size
 
             except Exception as e:
@@ -169,7 +167,8 @@ class Kinect:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
                 textFile.write("{}\n".format(timestamp))  # Add timestamp to the .txt file
                 cnt += 1
-                with self.kinectRGBQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment by the
+                with self.kinectRGBQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment
+                    # by the
                     # reader
                     self.kinectRGBQueueSize.value -= 1  # Decrement the queue size
 
@@ -188,7 +187,7 @@ class Kinect:
             try:
                 [frame, timestamp] = self.kinectDepthQueue.get_nowait()
                 name = str(cnt).zfill(5)
-                frame = extractDepth.colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
+                frame = colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
                 with open(os.path.join(self.savePathDepth, name), 'wb') as f:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
                 textFile.write("{} \n ".format(timestamp))
@@ -294,7 +293,6 @@ class FLIR:
 ########################################################################################################################
 ############################################### XSENS ##################################################################
 ########################################################################################################################
-
 class XSens:
     def __init__(self, IMUs, keepGoing, systemStatus, savePath, logger):
         self.IMUs = IMUs
@@ -305,73 +303,41 @@ class XSens:
         self.updateRate = 60
         self.radioChannel = 13
         self.maxBufferSize = 5
-        self.awinda = None
-        self.mtwCallbacks = None
-        self.filenamesPCKL = None
-        self.devId = None
-        self.devIdUsed = None
-        self.nDevs = None
-        self.firmware_version = None
-        self.controlDev = None
-        self.Ports = None
-
-    def initialiseAwinda(self):
-        awinda, mtwCallbacks, filenamesPCKL, devId, devIdUsed, nDevs, firmware_version, controlDev, Ports = mtw.initialiseAwinda(
-            self.IMUs,
-            self.updateRate,
-            self.radioChannel,
-            self.savePath, self.maxBufferSize, self.logger)
-
-        self.awinda = awinda
-        self.mtwCallbacks = mtwCallbacks
-        self.filenamesPCKL = filenamesPCKL
-        self.devId = devId
-        self.devIdUsed = devIdUsed
-        self.nDevs = nDevs
-        self.firmware_version = firmware_version
-        self.controlDev = controlDev
-        self.Ports = Ports
+        self.mtwManager = MTwManager(self.IMUs, self.savePath, self.logger)
 
     def readAndWrite(self):
-        self.initialiseAwinda()
+        self.mtwManager.initialise()
         self.systemStatus[2] = 1
         while np.sum(self.systemStatus) < len(self.systemStatus):
             continue
 
         self.logger.log("XSens is Recording")
         while self.keepGoing.value:  # As long as the acquisition goes on !
-            mtw.writeXsens(self.mtwCallbacks, self.filenamesPCKL)
+            self.mtwManager.writeXsens()
 
-        if not self.awinda.abortFlushing():
-            raise Exception("Failed to abort flyshing operation")
-            # self.logger.log("Failed to abort flushing operation.")
+        if not self.mtwManager.awinda.abortFlushing():
+            raise Exception("Failed to abort flushing operation")
         self.logger.log("Stopping XSens recording...\n")
-        if not self.awinda.stopRecording():
+
+        try:
+            self.mtwManager.awinda.stopRecording()
+        except Exception as e:
+            print(e)
             raise Exception("Failed to stop recording. Aborting.")
-            # self.logger.log("Failed to stop recording. Aborting.")
 
         # Writing the data from a pickle txt file to a readable txt file
         self.logger.log("Writing XSens PICKLE data to .txt ... \n")
-        mtw.pickle2txt(self.devId, self.devIdUsed, self.nDevs, self.firmware_version, self.filenamesPCKL,
-                       self.updateRate, self.savePath,
-                       self.maxBufferSize, self.logger)
+        mtw.pickle2txt(self.mtwManager)
 
-        self.logger.log("\n Closing XSens log file...")
-        if not self.awinda.closeLogFile():
-            # self.logger.log(str(error))
-            raise Exception("Failed to close log file. Aborting.")
-        self.logger.log("Exiting program...")
-        mtw.stopAll(self.awinda, self.controlDev, self.Ports, self.logger)
+        # print(self.mtwManager.awinda)
+        self.mtwManager.stop()
+        # mtw.stopAll(self.awinda, self.controlDev, self.Ports, self.logger)
         # print(self.awinda)
 
     def close(self):
-        if self.awinda:
-            mtw.stopAll(self.awinda, self.controlDev, self.Ports, self.logger)
-
-
-###############################################################################################################
-###############################################################################################################
-###############################################################################################################
+        self.logger.log("Closing")
+        if self.mtwManager.awinda is not None:
+            self.mtwManager.stop()
 
 
 @nb.jit(nopython=True)
