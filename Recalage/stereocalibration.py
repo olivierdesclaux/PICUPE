@@ -5,11 +5,11 @@ from datetime import datetime
 import os
 import json
 # Local modules
-from videostream import selectStreams
-from utils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder, openStereoCalibrationFile
-from circledetector import CircleDetector
-from circlegridfinder import CircleGridFinder
-from calibrate import calibrateCamera
+from Recalage.videostream import selectStreams
+from Recalage.cameraUtils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder, openStereoCalibrationFile
+from Recalage.circledetector import CircleDetector
+from Recalage.circlegridfinder import CircleGridFinder
+from Recalage.calibrate import calibrateCamera
 
 
 def main(saveDirectory):

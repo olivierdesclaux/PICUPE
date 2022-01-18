@@ -3,7 +3,7 @@
 
 import cv2
 import videostream
-from utils import scaleForHconcat, stop
+from cameraUtils import scaleForHconcat, stop
 import time
 import numpy as np
 

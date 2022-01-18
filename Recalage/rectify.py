@@ -6,7 +6,7 @@ import os
 import json
 # Local modules
 from videostream import selectStreams
-from utils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder
+from cameraUtils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder
 from circledetector import CircleDetector
 from circlegridfinder import CircleGridFinder
 

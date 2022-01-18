@@ -4,7 +4,7 @@ import json
 import os
 import numpy as np
 # Local modules
-from utils import NumpyEncoder, openCalibrationFile
+from Recalage.cameraUtils import NumpyEncoder, openCalibrationFile
 
 
 class CalibrationHandler:

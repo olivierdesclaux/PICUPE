@@ -3,11 +3,11 @@ import argparse
 from datetime import datetime
 import os
 # Local modules
-from videostream import selectStreams
-from circledetector import CircleDetector
-from calibrationhandler import CalibrationHandler
-from circlegridfinder import CircleGridFinder
-from utils import stop
+from Recalage.videostream import selectStreams
+from Recalage.circledetector import CircleDetector
+from Recalage.calibrationhandler import CalibrationHandler
+from Recalage.circlegridfinder import CircleGridFinder
+from Recalage.cameraUtils import stop
 
 
 def calibrateCamera(cameraType, saveDirectory, flags, initialNumGrids=40, minNumGrids=35, maxPointError=1.0, rows=9, cols=15):
@@ -124,4 +124,5 @@ if __name__ == '__main__':
     dt_string = now.strftime("%Y-%m-%d_%H-%M")
     saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
     # Starts true program
-    calibrateCamera(cameraType, saveDirectory)
+    flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
+    calibrateCamera(cameraType, saveDirectory, flirCalibFlags)

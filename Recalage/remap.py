@@ -3,7 +3,7 @@ import argparse
 import os
 # Local modules
 from videostream import selectStreams
-from utils import stop, openRectFile, scaleForHconcat, findBoundingRectangle
+from cameraUtils import stop, openRectFile, scaleForHconcat, findBoundingRectangle
 
 
 def main(cameras, rectFile):

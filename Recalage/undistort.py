@@ -7,7 +7,7 @@ import sys
 import cv2 as cv
 # Local modules
 from videostream import openStream
-from utils import stop, openCalibrationFile
+from cameraUtils import stop, openCalibrationFile
 
 # File with calibration matrices
 # Format should be identical to calibrate.py

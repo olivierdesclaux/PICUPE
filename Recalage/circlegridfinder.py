@@ -3,7 +3,7 @@ import cv2.cv2 as cv2
 import time
 from threading import Thread
 # Local modules
-from videostream import StreamType
+from Recalage.videostream import StreamType
 
 
 class CircleGridFinder:
