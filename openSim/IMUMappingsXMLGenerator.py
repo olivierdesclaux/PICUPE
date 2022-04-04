@@ -33,7 +33,7 @@ def makeIMUPlacer_xml(path2Exp):
 
     Returns
     -------
-
+    res: str, path to the generated .xml
     """
     path2MTw = os.path.join(path2Exp, "XSens", "MTw data")
     if not os.path.isdir(path2MTw):
@@ -77,7 +77,8 @@ def makeIMUPlacer_xml(path2Exp):
     with open(os.path.join(save_path, "IMUMappings.xml"), "wb") as writer:
         writer.write(xml_object)
 
-    return os.path.join(save_path, "IMUMappings.xml")
+    res = os.path.join(save_path, "IMUMappings.xml")
+    return res
 
 
 if __name__ == "__main__":
