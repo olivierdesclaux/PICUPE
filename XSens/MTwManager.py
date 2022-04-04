@@ -5,7 +5,18 @@ from XSens.MTwCallback import MTwCallback
 
 
 class MTwManager:
+    """
+    Main class for interfacing with the IMU station and associated IMUs.
+    """
     def __init__(self, IMUs, savePath, logger):
+        """
+        Init. function
+        Parameters
+        ----------
+        IMUs: list, list of strings containing the imu names we want to connect to. e.g. ["Head", "Torso", "Pelvis"]
+        savePath: str, path to the XSens data path.
+        logger: Logger, logs all of the events.
+        """
         self.logger = logger
         self.savePath = savePath
         self.IMUs = IMUs
@@ -25,12 +36,6 @@ class MTwManager:
         self.MTws = None
         self.callbacks = []
         self.filenamesPCKL = []
-
-        # self.IMUMappings = {
-        #     "Head": "00B43B3E",
-        #     "Torso": "00B43B4B",
-        #     "Hips": "00B43CC1"
-        # }
 
         self.IMUMappings = {
             "Head": "00B48765",
@@ -53,6 +58,12 @@ class MTwManager:
         }
 
     def initialise(self):
+        """
+        Connects to the awinda station, and finds the imus stored in self.IMUs.
+        Returns
+        -------
+        None
+        """
         self.logger.log("Creating saving directory")
         self.pickleDir, self.logfile = self.makeLogFile()
 
@@ -93,10 +104,18 @@ class MTwManager:
         self.logger.log("Set up all the IMUs. When ready, press s to start... \n")
 
     def resetOrientations(self):
+        """
+        Can reset orientation of different imus and store the resetted orientation. The problem is that every time
+        you turn off the IMU, or disconnect the awinda station, the header reset is "forgotten". Currently not
+        integrated in the final pipeline.
+        Returns
+        -------
+        None
+        """
         self.logger.log("Resetting orientations...")
 
         self.device.gotoMeasurement()
-        time.sleep(10)
+        time.sleep(10)  # Not necessary.
         for imu in self.MTws:
             if not imu.resetOrientation(xda.XRM_Alignment):
                 self.logger.log("Could not reset the header for imu {}".format(str(imu.deviceId())))
@@ -165,6 +184,13 @@ class MTwManager:
             return Port
 
     def getBatteryLevels(self):
+        """
+        Function for getting the battery level of each imu. Unfortunately returns 0 all the time.
+        TODO: make it work.
+        Returns
+        -------
+        None
+        """
         for imu in self.MTws:
             imu.requestBatteryLevel()
             print(imu.batteryLevel())
@@ -226,6 +252,14 @@ class MTwManager:
         self.MTws = MTws
 
     def configureIMUs(self):
+        """
+        For each imu, associate a pckl file and a callback that will take care of receiving data and writing it t the
+        pckl file. Updates self.callbacks and self.filenamesPCKL attributes.
+
+        Returns
+        -------
+        None
+        """
         for imu in self.MTws:
             # add callback to handle data transmission to each MTw
             callback = MTwCallback(self.maxBufferSize)
@@ -282,6 +316,12 @@ class MTwManager:
                 callback.writeData(filenamePCKL)
 
     def stop(self):
+        """
+        Stops all recordings, destroys all objects associated to the Awinda station.
+        Returns
+        -------
+
+        """
         if self.device is not None:
             self.logger.log("\n Closing XSens log file...")
             try:
@@ -300,6 +340,12 @@ class MTwManager:
         self.control = None
 
     def test(self):
+        """
+        For testing the IMU station. Called in the main gui. Connects to the station and then disconnects.
+        Returns
+        -------
+
+        """
         self.control = xda.XsControl_construct()
         self.Port = self.findPort()
         self.deviceId = self.Port.deviceId()
@@ -319,5 +365,4 @@ class MTwManager:
         self.device.disableRadio()
         self.control.close()
         xda.XsControl.destruct(self.control)
-        # self.stop()
         print("IMU station successfully tested")
