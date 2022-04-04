@@ -44,8 +44,6 @@ def vizKinect(path):
         with open(depth, 'rb') as f:
             imDepth = np.load(f)
             imDepth = cv2.resize(imDepth, dsize=None, fx=0.5, fy=0.5)
-        # print(imDepth.shape)
-        # print(imRGB.shape)
         ts = timestamps.readline().strip()
         # image = cv2.hconcat((imRGB, np.stack((imDepth, imDepth, imDepth))))
         image = cv2.hconcat((imRGB, imDepth))

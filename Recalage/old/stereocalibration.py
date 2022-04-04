@@ -4,8 +4,9 @@ import argparse
 from datetime import datetime
 import os
 import json
+sys.path.append("../")
 # Local modules
-from Recalage.videostream import selectStreams
+from Recalage.videostream import selectStreams, selectStreams2
 from Recalage.cameraUtils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder, openStereoCalibrationFile
 from Recalage.circledetector import CircleDetector
 from Recalage.circlegridfinder import CircleGridFinder
@@ -16,15 +17,16 @@ def main(saveDirectory):
     # Start by calibrating the FLIR
     # Calibration results will be stored in the saveDirectory under CalibF.json
     flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
-    flirCalib = calibrateCamera("F", saveDirectory, flirCalibFlags, initialNumGrids=20, minNumGrids=17)
-    # flirCalib = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\2021-12-02_18-25_FK\FCalib.json"
+    # flirCalib = calibrateCamera("F", saveDirectory, flirCalibFlags, initialNumGrids=20, minNumGrids=17)
+    flirCalib = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\2021-12-02_18-25_FK\FCalib.json"
     # Compute stereocalibration and extract stereocalibration file
     kinectCalib = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\CalibKinectFactory5Dist.json"
 
     # Defining stereocalibration flags
     stereoFlags = cv2.CALIB_FIX_INTRINSIC
     # stereoCalibrationFile = stereoCalibrate("FK", flirCalib, kinectCalib, saveDirectory, stereoFlags, initialNumGrids=20)
-    stereoCalibrationFile = stereoCalibrate("KF", kinectCalib, flirCalib, saveDirectory, stereoFlags, initialNumGrids=20)
+    stereoCalibrationFile = stereoCalibrate("WK", kinectCalib, flirCalib, saveDirectory, stereoFlags,
+                                            initialNumGrids=20)
 
     # Compute rectification matrices
     rectify(stereoCalibrationFile)
@@ -70,7 +72,8 @@ def stereoCalibrate(camerasToOpen, calibFile1, calibFile2, saveDirectory, flags,
 
     # Opens 2 streams, depending on cameras specificed in args
     try:
-        streams, types = selectStreams(camerasToOpen)#, useKVS=True)
+        # streams, types = selectStreams(camerasToOpen, useKVS=True)
+        streams, types = selectStreams2(["kinect", "webcam"])
     # If invalid camera types
     except LookupError as err:
         sys.exit(err)

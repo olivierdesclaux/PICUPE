@@ -2,7 +2,9 @@ from threading import Thread, Timer
 from enum import Enum
 import cv2.cv2 as cv2
 import pyk4a as k4a
-
+import sys
+sys.path.append("..")
+from utils.readerWriterClass import findCameraPort
 
 class VideoStream:
     """Returns frames from an OpenCV VideoCapture
@@ -222,6 +224,44 @@ class StreamType(Enum):
     ir = 1  # Infrared
     depth = 2
 
+def selectStreams2(streamNames):
+    ports = []
+    if type(streamNames) == str:
+        streamNames = [streamNames]
+    for name in streamNames:
+        if name == "kinect":
+            ports.append(name)
+        else:
+            ports.append(findCameraPort(name))
+
+    streams = []
+    types = []
+    for portNum, streamName in zip(ports, streamNames):
+        if streamName == "kinect":
+            stream = KinectVideoStream()
+            streams.append(stream)
+            types.append(StreamType.rgb)
+        elif streamName == "flir":
+            cam = cv2.VideoCapture(portNum, cv2.CAP_DSHOW)
+            cam.set(cv2.CAP_PROP_BUFFERSIZE, 0)
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+            cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
+            stream = VideoStream(cam)
+            streams.append(stream)
+            types.append(StreamType.ir)
+        elif streamName == "webcam":
+            cam = cv2.VideoCapture(portNum, cv2.CAP_DSHOW)
+            cam.set(cv2.CAP_PROP_BUFFERSIZE, 0)
+            cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+
+            stream = VideoStream(cam)
+            streams.append(stream)
+            types.append(StreamType.rgb)
+
+    return streams, types
+
 
 def openStream(targetCamera=None, targetHeight=None, flag="",
                openedStreams=[]):
@@ -320,21 +360,22 @@ def selectStreams(streamLetters, useKVS=False):
     # the height of the image in different ports.
     # The FLIR in IR has a height of 768 pixels 
     # Kinect in RGB has a height of 720 pixels
+
     for letter in streamLetters:
         if letter == "F":
             stream, streamIndex = openStream(
                 targetHeight=768, openedStreams=streamIndices)
             types.append(StreamType.ir)
-        elif useKVS and letter == "K":
+        elif letter == "K":
             stream = KinectVideoStream()
             types.append(StreamType.rgb)
-        elif letter == "K":
-            stream, streamIndex = openStream(
-                targetHeight=720, openedStreams=streamIndices)
-            types.append(StreamType.rgb)
+        # elif letter == "K":
+        #     stream, streamIndex = openStream(
+        #         targetHeight=720, openedStreams=streamIndices)
+        #     types.append(StreamType.rgb)
         elif letter == "W":
             stream, streamIndex = openStream(
-                targetCamera=0, flag="W", openedStreams=streamIndices)
+                targetHeight=0, flag="W", openedStreams=streamIndices)
             types.append(StreamType.rgb)
         else:
             # If letter does not match any of the options

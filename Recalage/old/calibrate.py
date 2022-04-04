@@ -2,15 +2,18 @@ import cv2.cv2 as cv2
 import argparse
 from datetime import datetime
 import os
+import sys
 # Local modules
-from Recalage.videostream import selectStreams
+sys.path.append("../")
+from Recalage.videostream import selectStreams, selectStreams2
 from Recalage.circledetector import CircleDetector
 from Recalage.calibrationhandler import CalibrationHandler
 from Recalage.circlegridfinder import CircleGridFinder
 from Recalage.cameraUtils import stop
 
 
-def calibrateCamera(cameraType, saveDirectory, flags, initialNumGrids=40, minNumGrids=35, maxPointError=1.0, rows=9, cols=15):
+def calibrateCamera(cameraType, saveDirectory, flags, initialGuess, initialNumGrids=40, minNumGrids=35,
+                    maxPointError=1.0, rows=9, cols=15):
     """Calibrate.py obtains intrinsic camera parameters using a grid pattern 
 
     Script asks user to present an asymmetric circle grid to the camera 
@@ -46,7 +49,8 @@ def calibrateCamera(cameraType, saveDirectory, flags, initialNumGrids=40, minNum
     stream = None
     streamType = None
     try:
-        [stream], [streamType] = selectStreams(cameraType)
+        # [stream], [streamType] = selectStreams(cameraType)
+        [stream], [streamType] = selectStreams2(cameraType)
     # Invalid camera types
     except LookupError as err:
         stop(str(err), stream)
@@ -89,7 +93,7 @@ def calibrateCamera(cameraType, saveDirectory, flags, initialNumGrids=40, minNum
         # and error-checking
         calibration = CalibrationHandler(gridFinder.objectPositions,
                                          gridFinder.allImagePositions[0], frameSize,
-                                         minNumGrids, maxPointError, flags)
+                                         minNumGrids, maxPointError, flags, initialGuess)
 
         # If the calibration succeeds
         if calibration.calibrate():
@@ -124,5 +128,7 @@ if __name__ == '__main__':
     dt_string = now.strftime("%Y-%m-%d_%H-%M")
     saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
     # Starts true program
-    flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
-    calibrateCamera(cameraType, saveDirectory, flirCalibFlags)
+    # flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
+    initialGuess = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\CalibKinectFactory5Dist.json"
+    flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_K3
+    calibrateCamera(cameraType, saveDirectory, flirCalibFlags, initialGuess)
