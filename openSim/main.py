@@ -26,7 +26,7 @@ def main(experimentDir):
         imuMappings = makeIMUPlacer_xml(experimentDir)
 
     print(imuMappings)
-    model = r'C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\openSim\OpenSense\Rajagopal_2015_calibrationPose.osim'
+    model = r'C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\openSim\Rajagopal_2015_calibrationPose.osim'
 
     if not os.path.isdir(osimFolder):
         os.mkdir(osimFolder)
