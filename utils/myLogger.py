@@ -1,16 +1,14 @@
 import logging
 import multiprocessing
-import threading
-import time
 import sys
 import traceback
-import random
 import os
 import shutil
 
 class Logger:
     def __init__(self, savePath, name):
-        self.logger = self.initLogger(savePath, name)
+        self.savePath = savePath
+        self.logger = self.initLogger(self.savePath, name)
         self.loggerQueue = multiprocessing.Queue()
 
     def initLogger(self, savePath, name):
@@ -26,10 +24,10 @@ class Logger:
         """
         # Initialise logging object
         logger = logging.getLogger()
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         # create file handler which logs even debug messages
         fh = logging.FileHandler(os.path.join(savePath, name))
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(logging.INFO)
         # create console handler with a higher log level
         ch = logging.StreamHandler()
         ch.setLevel(logging.ERROR)
@@ -45,7 +43,9 @@ class Logger:
 
     def logWriter(self):
         """
-        Function that will actually write to file. Will be threaded in main process. Reads data from the loggerQueue, and outputs it to
+        Function that will actually write to file. Will be threaded in main process. Reads data from the loggerQueue,
+        and outputs it to the self.savePath file
+
         Returns
         -------
 
@@ -63,14 +63,55 @@ class Logger:
                 sys.exit()
 
     def log(self, msg):
-        currentProcess = str(multiprocessing.current_process().name) + ": "
+        """
+        Puts a message in the self.loggerQueue, alongside the associated process this message comes froms
+        Parameters
+        ----------
+        msg: str, the message
+
+        Returns
+        -------
+        None
+        """
+        currentProcess = str(multiprocessing.current_process().name) + ": "  # Get current process name
         self.loggerQueue.put(currentProcess + msg)
 
     def stop(self):
+        """
+        By putting a None in the queue, the logging thread will stop as soon as it sees the None
+
+        Returns
+        -------
+        None
+        """
         self.loggerQueue.put_nowait(None)
 
 
 def createSaveDirectories(resultsDir, saveName):
+    """
+    Generates the main directory and subdirectories for storing all data. Architecture is as follows:
+    - resultsDir
+        - saveName
+            - calib
+            - depth
+            - flir
+            - rgb
+            - XSens
+
+    Parameters
+    ----------
+    resultsDir: str, path to the main directory for saving data
+    saveName: str, subdirectory name
+
+    Returns
+    -------
+    newSavePath: path to saveName dir
+    savePathRGB: path to rgb dir
+    savePathDepth: path to depth dir
+    savePathFlir: path to flir dir
+    savePathXsens: path to Xsens dir
+    savePathCalib: path to calib dir
+    """
     newSavePath = os.path.join(resultsDir, saveName)
     savePathDepth = os.path.join(newSavePath, "depth")
     savePathRGB = os.path.join(newSavePath, "rgb")
@@ -107,7 +148,7 @@ def copyCalibrationFiles(calibDir, savePathCalib):
     files = os.listdir(calibDir)
     if ("calib" in files) and os.path.isdir(os.path.join(calibDir, "calib")):
         calibDir = os.path.join(calibDir, "calib")
-    calibrationFiles = ['ErrorCharts.png', 'FCalib.json', 'Rectify.json', 'stereo.json', "calibParameters.json"]
+    calibrationFiles = ['ErrorCharts.png', 'flirCalib.json', 'stereo.json', "calibParameters.json", "customLog.log"]
     if not set(calibrationFiles) == set(os.listdir(calibDir)):
         for x in calibrationFiles:
             if x not in os.listdir(calibDir):
@@ -116,69 +157,3 @@ def copyCalibrationFiles(calibDir, savePathCalib):
     else:
         shutil.copytree(calibDir, savePathCalib, dirs_exist_ok=True)
 
-#
-# def main():
-#     logger = initLogger("./")
-#     loggerQueue = multiprocessing.Queue()
-#     keepGoing = multiprocessing.Value('i', 1)
-#     procs = []
-#     for i in range(5):
-#         p = multiprocessing.Process(target=foo2, args=(loggerQueue,))
-#         p.name = "Bambou " + str(i)
-#         procs.append(p)
-#     listener = threading.Thread(target=logWriter, args=(logger, loggerQueue), daemon=True)
-#     listener.start()
-#     for proc in procs:
-#         proc.start()
-#     time.sleep(1)
-#     with keepGoing.get_lock():
-#         keepGoing.value = 0
-#     for proc in procs:
-#         proc.join()
-#
-#     loggerQueue.put_nowait(None)
-#     # listener.join()
-#     # for _ in range(5):
-#     #     time.sleep(0.5)
-#     #
-#
-#
-# def logWriter(logger, loggerQueue):
-#     while True:
-#         try:
-#             record = loggerQueue.get()
-#             if record is None:
-#                 break
-#             print(record)
-#             logger.info(record)
-#         except Exception:
-#             print('Whoops! Problem:', file=sys.stderr)
-#             traceback.print_exc(file=sys.stderr)
-#             sys.exit()
-#
-#
-# def log(loggerQueue, msg):
-#     currentProcess = str(multiprocessing.current_process().name) + ": "
-#     loggerQueue.put(currentProcess + msg)
-#
-#
-# def foo(loggerQueue):
-#     # loggerQueue.put(str(time.time()))
-#     currentProcess = str(multiprocessing.current_process().name) + ": "
-#     loggerQueue.put(currentProcess + "Bla")
-#
-#
-# def foo2(loggerQueue):
-#     x = random.random()
-#     if x < 0.5:
-#         log(loggerQueue, "x below 0.5")
-#
-#     try:
-#         x = 1 / 0
-#     except ZeroDivisionError as e:
-#         log(loggerQueue, str(e))
-#         # print(e)
-#
-#
-# if __name__ == '__main__':
-#     main()

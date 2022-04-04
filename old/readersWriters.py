@@ -5,7 +5,7 @@ import sys
 import cv2.cv2 as cv2
 import numpy as np
 import pyk4a as k4a
-from utils import extractDepth
+from cameraUtils import extractDepth
 import numba as nb
 import MTwFunctions as mtw
 

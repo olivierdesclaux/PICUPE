@@ -9,7 +9,6 @@ class Process(multiprocessing.Process):
     https://stackoverflow.com/a/58060759/14583450
     """
 
-
     def __init__(self, name, logger, system, *args, **kwargs):
         multiprocessing.Process.__init__(self, *args, **kwargs)
         self._parent_conn, self._child_conn = multiprocessing.Pipe()
@@ -54,7 +53,6 @@ def monitorProcesses(procs):
     -------
     None
     """
-    # while any([proc.is_alive() for proc in procs]):
     if any([proc.is_alive() for proc in procs]):
         for proc in procs:
             if proc.exception:

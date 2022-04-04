@@ -55,7 +55,7 @@ def readMot(filePath):
 
 def computeMarker3D(model, experimentPath):
     """
-    Computes the positions through time of markers on an .osim model that is animated by a .sto file. This is LONG. 
+    Computes the positions through time of markers on an .osim model that is animated by a .sto file. This is LONG.
     Parameters
     ----------
     model: str, path to the .osim model used. Must contain a subset of markers.

@@ -102,7 +102,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description="Remap images from 2 cameras using stored .json maps.")
     # Used to select cameras to open, must be of length 2
-    latestCalibrationFile = os.path.join("Results", [x for x in os.listdir("Results/") if "2021" in x][-1],
+    latestCalibrationFile = os.path.join("../../sandbox/results", [x for x in os.listdir("Results/") if "2021" in x][-1],
                                          "RectifyFK.json")
     parser.add_argument('-c', type=str, dest='cameras', help='List of cameras to open', required=True)
     parser.add_argument('--rectFile', type=str, dest='file', help='Rectification file to open',

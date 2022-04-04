@@ -190,7 +190,6 @@ def scaleForHconcat(referenceImage, targetImage, scalingFactor=1.0):
     # Returns but also modifies images in place anyways
     return resizedReferenceImage, resizedTargetImage
 
-
 # Encodes numpy arrays as normal lists
 # Otherwise, they cannot be encode to JSON
 # Used when invoking json.dump as cls param

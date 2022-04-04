@@ -1,24 +1,46 @@
 import numpy as np
 import json
 import os
-import cv2
+import cv2.cv2 as cv2
 import tkinter
 import tkinter.ttk as ttk
-from tkinter import simpledialog
 import argparse
+import sys
+from mpl_toolkits import mplot3d
+import matplotlib.pyplot as plt
+
+sys.path.append("../../")
+from Recalage.stereocalibration import undistort, undistortPoints
 
 JOINTS = ['SpineBase', 'SpineMid', 'Neck', 'Head',
           'ShoulderLeft', 'ElbowLeft', 'WristLeft', 'HandLeft',
           'ShoulderRight', 'ElbowRight', 'WristRight', 'HandRight',
           'HipLeft', 'KneeLeft', 'AnkleLeft', 'FootLeft',
           'HipRight', 'KneeRight', 'AnkleRight', 'FootRight',
-          'SpineShoulder', 'HandTipLeft', 'ThumbLeft', 'HandTipRight',
-          'ThumbRight']
-
-# Markers = ['pelvis', 'torso',
-#            'humerus_r', 'radius_r',
-#            'femur_r', 'tibia_r', 'patella_r', 'talus_r', 'toes_r',
-#            'femur_l', 'tibia_l', 'patella_l', 'talus_l', 'toes_l',]
+          'SpineShoulder']
+links = {
+    'SpineBase': ['SpineMid', 'HipLeft', 'HipRight'],
+    'SpineMid': ['SpineBase', 'SpineShoulder'],
+    'SpineShoulder': ['Neck', 'SpineMid', 'ShoulderLeft', 'ShoulderRight'],
+    'Neck': ['Head', 'SpineShoulder'],
+    'Head': ['Neck'],
+    'ShoulderLeft': ['SpineShoulder', 'ElbowLeft'],
+    'ElbowLeft': ['WristLeft', 'ShoulderLeft'],
+    'WristLeft': ['ElbowLeft', 'HandLeft'],
+    'HandLeft': ['WristLeft'],
+    'ShoulderRight': ['SpineShoulder', 'ElbowRight'],
+    'ElbowRight': ['WristRight', 'ShoulderRight'],
+    'WristRight': ['ElbowRight', 'HandRight'],
+    'HandRight': ['WristRight'],
+    'HipLeft': ['SpineBase', 'KneeLeft'],
+    'KneeLeft': ['HipLeft', 'AnkleLeft'],
+    'AnkleLeft': ['KneeLeft', 'FootLeft'],
+    'FootLeft': ['AnkleLeft'],
+    'HipRight': ['SpineBase', 'KneeRight'],
+    'KneeRight': ['HipRight', 'AnkleRight'],
+    'AnkleRight': ['KneeRight', 'FootRight'],
+    'FootRight': ['AnkleRight']
+}
 
 DEFAULT_KPT = [[[258.5, 179.5], [258.5, 135.], [255.5, 87.5], [255.5, 71.5],
                 [282.5, 100.], [287., 131.5], [286., 161.5], [286., 167.],
@@ -36,31 +58,63 @@ JOINTS_COLOR = [(255, 0, 0), (244, 41, 0), (234, 78, 0), (223, 112, 0),
                 (244, 41, 0)]
 
 
-class Noter():
+class Noter:
+    def __init__(self, data_dir, imageNum, scale, radius):
+        self.data_dir = data_dir
+        if type(imageNum) is not str:
+            imageNum = str(imageNum)
+            zeroPadding = (5 - len(imageNum)) * '0'  # Number of zeros to add in front of image
+            self.imageNum = zeroPadding + imageNum
 
-    def __init__(self, kpts_out, scale, radius, kpts_in):
+        # Paths for saving keypoints in different views.
+        self.annotations_path = os.path.join(data_dir, "annotations")
+        self.annotations_path_rgb = os.path.join(self.annotations_path, "rgb")
+        self.annotations_path_flir = os.path.join(self.annotations_path, "flir")
+        self.annotations_path_3D = os.path.join(self.annotations_path, "3D")
+
         # Visualization variable, radius for circle dimension and scale for image dimension
         self.radius = radius
         self.scale = scale
 
-        # Loading annotation if we're resuming old noting sessions
-        self.kpts_in = kpts_in
-        self.kpts_out = kpts_out
-        self.json_dict = dict()
-        if (self.kpts_in is not None) and (os.path.isfile(self.kpts_in)):
-            with open(self.kpts_in, 'r') as f:
-                self.json_dict = json.load(f)
+        # Init json dictionaries
+        self.json_dict_2D = {}
+        self.json_dict_3D = {}
+        self.json_dict_2D_IR = {}
+
+        if not os.path.isdir(self.annotations_path):
+            os.mkdir(self.annotations_path)
+            os.mkdir(self.annotations_path_rgb)
+            os.mkdir(self.annotations_path_flir)
+            os.mkdir(self.annotations_path_3D)
+
+        # Load existing annotations or set default
+        initial_annotations = os.path.join(self.annotations_path_rgb, str(self.imageNum) + ".json")
+        if os.path.isfile(initial_annotations):
+            with open(initial_annotations, 'r') as f:
+                jsonFile = json.load(f)
+                self.json_dict_2D = jsonFile
         else:
             for i, joint in enumerate(JOINTS):
-                self.json_dict[joint] = DEFAULT_KPT[0][i]
+                self.json_dict_2D[joint] = DEFAULT_KPT[0][i]
+
+        # Init 2D and 3D keypoint lists.
+        self.kpts = np.array([list(self.json_dict_2D.values())])
+        self.kpts_backup = self.kpts.copy()
+        self.kpts3D = []
+        self.kpts_IR = []
+        self.segmentLengths = None
+
+        # Init rgb and depth images
+        self.depth = None
+        self.rgb = None
+        self.flir = None
 
         # Event variable, for click, modify and add events
         self.is_clicked = False
         self.is_modifying = False
-        self.is_adding_joint = False
 
         # Point position and index variable
-        self.point = [-1, -1]
+        self.selectedPoint = [-1, -1]
         self.kpt_idx = -1
         self.obj_idx = -1
 
@@ -68,20 +122,16 @@ class Noter():
         self.master = tkinter.Tk()
         self.info = tkinter.StringVar()
         self.error = tkinter.StringVar()
-        self.status = tkinter.StringVar()
-        self.sequences = tkinter.StringVar()
-        self.progressbar = ttk.Progressbar(self.master, orient="horizontal", length=100, mode="determinate")
-        self.progressbar.pack(side=tkinter.BOTTOM)
-        tkinter.Label(master=self.master, textvariable=self.info).pack()
-        tkinter.Label(master=self.master, textvariable=self.error, width=25).pack()
-        tkinter.Label(master=self.master, textvariable=self.status).pack()
-        tkinter.Label(master=self.master, textvariable=self.sequences).pack()
+        jointFrame = ttk.LabelFrame(master=self.master, text="Selected Joint")
+        jointFrame.grid(column=0, row=0)
+        tkinter.Label(master=jointFrame, text="Name").grid(row=0, column=0)
+        tkinter.Label(master=jointFrame, textvariable=self.info).grid(row=0, column=1)
+        tkinter.Label(master=jointFrame, text="Status").grid(row=1, column=0)
+        tkinter.Label(master=jointFrame, textvariable=self.error, width=25).grid(row=1, column=1)
 
         # Tkinter initialization
         self.info.set("....")
         self.error.set("....")
-        self.status.set("....")
-        self.sequences.set("....")
 
         # Select format for different system
         if os.name == 'nt':
@@ -91,13 +141,14 @@ class Noter():
         else:
             raise NotImplementedError(f"Wrong system, implement different path management: {os.name}")
 
+        self.master.update()
+
     def reset(self):
         self.is_modifying = False
         self.is_clicked = False
-        self.is_adding_joint = False
         self.obj_idx = -1
         self.kpt_idx = -1
-        self.point = [-1, -1]
+        self.selectedPoint = [-1, -1]
 
     @staticmethod
     def draw_kpts(img, kpts, radius):
@@ -108,34 +159,35 @@ class Noter():
                 if el[0] >= 0 and el[1] >= 0:
                     cv2.circle(img, (int(el[0]), int(el[1])), radius, JOINTS_COLOR[i], -1)
 
-    def annotate(self, data_dir):
-        img = cv2.imread(os.path.join(data_dir, "RGB_image.png"))
-        h, w, _ = img.shape
-        depth = cv2.imread(os.path.join(data_dir, "depth_image.png"), cv2.IMREAD_GRAYSCALE)
-        name = "keypoints"
+    def annotate(self):
+        rgbPath = os.path.join(self.data_dir, "rgb")
+        depthPath = os.path.join(self.data_dir, "depth")
+        flirPath = os.path.join(self.data_dir, "flir")
 
-        # #Initialise keypoints
-        # if self.kpts_in is not None:
-        #     kpts = np.array(self.json_dict[name])
-        # else:
-        #     kpts2 = np.array(DEFAULT_KPT).copy()
-        # print(kpts2)
-        kpts = np.array([list(self.json_dict.values())])
+        rgb = np.load(os.path.join(rgbPath, self.imageNum))
+        depth = np.load(os.path.join(depthPath, self.imageNum), cv2.IMREAD_GRAYSCALE)
+        self.flir = np.load(os.path.join(flirPath, self.imageNum))
+        self.rgb = rgb
+        self.depth = depth
+
+        h, w, c = self.rgb.shape
+        if c == 4:
+            self.rgb = self.rgb[:, :, :3]
 
         # Upscale image for better readability
-        # This was in the initial code. Instead of changing everything, I just upscale (and downscale later on) with a scale factor of 1
-        img, kpts = self.upscale(img, kpts)
+        # This was in the initial code. Instead of changing everything, I just upscale (and downscale later on) with
+        # a scale factor of 1
+        self.rgb, self.kpts = self.upscale(self.rgb, self.kpts)
 
         # Create copy of image and keypoints on which we're going to work
-        tmp = img.astype(np.uint8).copy()
-        kpts_backup = kpts.copy()
+        tmp = self.rgb.astype(np.uint8).copy()
 
         # Start GUI
-        self.draw_kpts(tmp, kpts, self.radius)
+        name = str(self.imageNum)
+        self.draw_kpts(tmp, self.kpts, self.radius)
         cv2.namedWindow(name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(name, w, h)
-        # cv2.moveWindow(name, 15, 150)
-        cv2.setMouseCallback(name, self.click_left, [name, tmp, kpts])
+        cv2.setMouseCallback(name, self.click_left, [name, tmp, self.kpts])
         cv2.imshow(name, tmp)
 
         while True:
@@ -143,122 +195,271 @@ class Noter():
             key = cv2.waitKey(1) & 0xFF
 
             if key == ord('\n') or key == ord('\r'):
-                _, d_k = self.downscale(kpts=kpts)
-                kpts3D = []
-                for k in d_k[0]:
-                    y, x = k[0], k[1]
-                    z = float(depth[int(y), int(x)])
-                    kpts3D.append([x, y, z])
-
-                for i, marker in enumerate(JOINTS):
-                    self.json_dict[marker] = kpts3D[i]  # .tolist()
-
-                cv2.destroyAllWindows()
-                with open(self.kpts_out, 'w') as f:
-                    json.dump(self.json_dict, f)
+                self.write2DJoints()
+                self.convertTo3D()
+                self.write3DJoints()
+                self.annotateIR()
+                self.write_IR()
                 self.reset()
                 self.info.set("....")
                 self.error.set("....")
                 self.master.update()
                 break
 
-            # elif key == ord('r'):
-            #     tmp = input.astype(np.uint8).copy()
-            #     kpts_backup = kpts.copy()
-            #     self.draw_kpts(tmp, kpts_backup, self.radius)
-            #     self.reset()
-            #     cv2.setMouseCallback(name, self.click_left, [name, tmp, kpts])
-
-            # elif key == ord('c'):
-            #     with open(self.kpts_out, 'w') as f:
-            #         json.dump(self.json_dict, f)
-            #     exit(1)
-
-            # elif key == ord('p'):
-            #     self.error.set("Changing sequence.")
-            #     self.master.update()
-            #     next_name = name.split(self.slash)[-3]
-            #     self.reset()
-            #     break
-
-            # elif key == ord('n'):
-            #     tmp[:, :, :] = input.astype(np.uint8).copy()[:, :, :]
-            #     np.copyto(kpts, kpts_backup)
-            #     self.draw_kpts(tmp, kpts, self.radius)
-            #     self.reset()
-
-            if self.is_modifying is not True:
-                if key == ord('n'):
-                    tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
-                    np.copyto(kpts, kpts_backup)
-                    self.draw_kpts(tmp, kpts, self.radius)
-                    self.reset()
-
-                if key == 27 and self.is_clicked is True:
-                    for obj in range(kpts.shape[0]):
-                        for el in kpts[obj]:
-                            if int(el[0]) == self.point[0] and int(el[1]) == self.point[1]:
-                                el[0] = -1
-                                el[1] = -1
-                                break
-                    tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
-                    self.draw_kpts(tmp, kpts, self.radius)
-                    self.is_clicked = False
-                    self.is_modifying = True
-
-                elif key == ord('a') and self.is_clicked is not True:
-                    obj = 0
-                    val = 0
-                    lgnd = ""
-                    self.info.set('....')
-                    self.error.set('Adding joint.')
-                    self.master.update()
-                    while self.kpt_idx < 0 and val is not None and obj is not None:
-                        for key, v in enumerate(JOINTS):
-                            if key > 20:
-                                break
-                            lgnd += "{} for {}".format(key, v)
-                            if key != 20:
-                                lgnd += ", "
-                                if (key + 1) % 3 == 0:
-                                    lgnd += '\n'
-                        val = simpledialog.askinteger("Input", "Insert Joint Number\n{}".format(lgnd),
-                                                      parent=self.master,
-                                                      minvalue=0, maxvalue=25)
-                        self.master.update()
-                        if val:
-                            if kpts.shape[0] > 1:
-                                obj = simpledialog.askinteger("Input", "Insert obj number",
-                                                              parent=self.master,
-                                                              minvalue=0, maxvalue=kpts.shape[0])
-                            if obj is not None:
-                                self.kpt_idx = val
-                                self.obj_idx = obj
-                                if self.kpt_idx < 0 or self.kpt_idx > 20:
-                                    self.error.set("Insert only value between 0 and 20.")
-                                    self.master.update()
-                                    self.kpt_idx = -1
-                                    continue
-                                self.is_adding_joint = True
-
-                elif key == 27 and self.is_clicked is not True:
+            if self.is_modifying is False:
+                if key == 27 and not self.is_clicked:
+                    print("Exiting without saving.")
                     break
+                elif key == 27 and self.is_clicked:
+                    self.selectedPoint = [-1, -1]
+                    tmp[:, :, :] = self.rgb.astype(np.uint8).copy()[:, :, :]
+                    np.copyto(self.kpts_backup, self.kpts)
+                    self.draw_kpts(tmp, self.kpts, self.radius)
+                    self.is_clicked = False
+                    self.is_modifying = False
             else:
-                if key == ord('y') and self.is_modifying is True:
+                if key == 27:  # User pressed the esc button while modifying a kpt
+                    self.selectedPoint = [-1, -1]
+                    tmp[:, :, :] = self.rgb.astype(np.uint8).copy()[:, :, :]
+                    np.copyto(self.kpts, self.kpts_backup)
+                    self.draw_kpts(tmp, self.kpts, self.radius)
+                    self.is_clicked = False
+                    self.is_modifying = False
+
+                elif key == ord('y'):
                     self.error.set('....')
-                    tmp[:, :, :] = img.astype(np.uint8).copy()[:, :, :]
-                    np.copyto(kpts_backup, kpts)
-                    self.draw_kpts(tmp, kpts, self.radius)
+                    tmp[:, :, :] = self.rgb.astype(np.uint8).copy()[:, :, :]
+                    np.copyto(self.kpts_backup, self.kpts)
+                    self.draw_kpts(tmp, self.kpts, self.radius)
                     self.reset()
 
         cv2.destroyAllWindows()
+        self.master.destroy()
         return True
+
+    def write2DJoints(self):
+        _, d_k = self.downscale(kpts=self.kpts_backup)  # Most recently saved kpts
+        d_k = d_k[0]
+        for i, marker in enumerate(JOINTS):
+            self.json_dict_2D[marker] = list(d_k[i])
+        filePath = os.path.join(self.annotations_path_rgb, str(self.imageNum) + ".json")
+        with open(filePath, 'w') as f:
+            json.dump(self.json_dict_2D, f)
+
+    def convertTo3D(self):
+        kInt = np.array([[599.19, 0.0, 633.4154], [0.0, 599.5903, 369.7261], [0.0, 0.0, 1.0]])
+        fx = kInt[0, 0]
+        fy = kInt[1, 1]
+        cx = kInt[0, 2]
+        cy = kInt[1, 2]
+        kDist = np.array([0.06640906755828462, -0.02978842968405564, 0.002389513299378855, -0.002113879410271612, 0.0])
+
+        _, d_k = self.downscale(kpts=self.kpts_backup)  # Most recently saved kpts
+        for k in d_k[0]:
+            x, y = k[0], k[1]
+            # z = self.depth[int(y), int(x), :]
+            z = self.depth[int(y), int(x)]
+            z = int(z)  # Convert from uint16 to signed int.
+
+            [[undistorted_x, undistorted_y]] = undistort([np.array([x, y])], kInt, kDist)
+            x_3D = ((undistorted_x - cx) / fx * z)
+            y_3D = ((undistorted_y - cy) / fy * z)
+            self.kpts3D.append([x_3D, y_3D, z])
+
+    def write3DJoints(self):
+        for i, marker in enumerate(JOINTS):
+            self.json_dict_3D[marker] = self.kpts3D[i]
+        filePath = os.path.join(self.annotations_path_3D, str(self.imageNum) + ".json")
+        with open(filePath, 'w') as f:
+            json.dump(self.json_dict_3D, f)
+
+    def viz3D(self):
+        if self.segmentLengths is None:
+            print("Computing segment lengths...")
+            self.computeSegmentLengths()
+            print("Done.")
+
+        fig1 = plt.figure(figsize=(15, 8))
+        axRGB = fig1.add_subplot(1,2,1)
+        self.draw_kpts(self.rgb, self.kpts, self.radius)
+        # rgb = cv2.resize(self.rgb, None, fx=1.5, fy=1.5)
+        axRGB.imshow(cv2.cvtColor(self.rgb, cv2.COLOR_BGR2RGB))
+
+        axIR = fig1.add_subplot(1, 2, 2)
+        # flir = cv2.resize(self.flir, None, fx=1.5, fy=1.5)
+        axIR.imshow(cv2.cvtColor(self.flir, cv2.COLOR_BGR2RGB))
+
+        fig2 = plt.figure(figsize=(15, 8))
+        # 2D plot with distances
+        ax2D = fig2.add_subplot(1, 2, 1)
+
+        # 3D plot
+        ax3D = fig2.add_subplot(1, 2, 2, projection='3d')
+        d = self.json_dict_3D
+        xdata = [d[x][0] for x in d.keys()]
+        ydata = [-d[x][1] for x in d.keys()]  # Because openCV has 0 starting at the top
+        zdata = [d[x][2] for x in d.keys()]
+
+        ax3D.scatter3D(xdata, ydata, zdata, c=zdata, cmap='Greens')
+
+        for jointName in links.keys():
+            jointCoords = d[jointName]
+            connectedJoints = links[jointName]
+            for joint2Name in connectedJoints:
+                joint2Coords = d[joint2Name]
+                x1, y1, z1 = jointCoords
+                y1 = - y1
+                x2, y2, z2 = joint2Coords
+                y2 = -y2
+                # ax3D.plot([jointCoords[0], joint2Coords[0]], [jointCoords[1], joint2Coords[1]], [jointCoords[2],
+                #                                                                                joint2Coords[2]])
+                ax3D.plot([x1, x2], [y1, y2], [z1, z2])
+
+                ax2D.plot([x1, x2], [y1, y2])
+                if (jointName + '-' + joint2Name) in self.segmentLengths.keys():
+                    length = self.segmentLengths[jointName + '-' + joint2Name]
+                elif (joint2Name + '-' + jointName) in self.segmentLengths.keys():
+                    length = self.segmentLengths[joint2Name + '-' + jointName]
+                else:
+                    raise ValueError("Oups")
+                ax2D.annotate(str(round(length/10, 1)), xy=((x1 + x2) / 2, (y1 + y2) / 2), xytext=(-1, 1),
+                              textcoords='offset pixels')
+        plt.tight_layout()
+        plt.show()
+
+    def computeSegmentLengths(self):
+        distances = {}
+        for joint in links.keys():
+            jointCoords = np.array(self.json_dict_3D[joint])
+            for joint2 in links[joint]:
+                if (joint + '-' + joint2) in distances.keys() or (joint2 + '-' + joint) in distances.keys():
+                    continue
+                else:
+                    joint2Coords = np.array(self.json_dict_3D[joint2])
+                    distances[joint + '-' + joint2] = np.linalg.norm(joint2Coords - jointCoords)
+        self.segmentLengths = distances
+        return distances
+
+    # def annotateIR(self):
+    #     calibFiles = os.path.join(self.data_dir, "calib")
+    #     with open(os.path.join(calibFiles, "stereo.json")) as f:
+    #         stereo = json.load(f)
+    #
+    #     M1 = np.array(stereo["Matrix1"])  # Left Matrix
+    #     D1 = np.array(stereo["Dist1"])  # Left Dist
+    #     M2 = np.array(stereo["Matrix2"])  # Right Matrix
+    #     D2 = np.array(stereo["Dist2"])  # Right Dist
+    #     R = np.array(stereo["R"])
+    #     T = np.array(stereo["T"])
+    #     # STEREO RECTIFICATION
+    #     R1, R2, P1, P2, Q, roi1, roi2 = cv2.stereoRectify(M1, D1, M2, D2, (1024, 768), R, T, alpha=1,
+    #                                                       flags=cv2.CALIB_ZERO_DISPARITY)
+    #
+    #     new_M1, _ = cv2.getOptimalNewCameraMatrix(M1, D1, (1024, 768), 1, (1024, 768))
+    #     new_M2, _ = cv2.getOptimalNewCameraMatrix(M2, D2, (1280, 720), 1, (1280, 720))
+    #     print(new_M1)
+    #     print(new_M2)
+    #     # COMPUTE UNDISTORTION+RECTIFICATION MAPS
+    #     leftMap1, leftMap2 = cv2.initUndistortRectifyMap(new_M1, D1, R1, P1, (1024, 768),
+    #                                                      cv2.CV_32FC1)
+    #     rightMap1, rightMap2 = cv2.initUndistortRectifyMap(new_M2, D2, R2, P2, (1024, 768),
+    #                                                        cv2.CV_32FC1)
+    #     flir_rectified = cv2.remap(self.flir, leftMap1, leftMap2, interpolation=cv2.INTER_LINEAR)
+    #     rgb_rectified = cv2.remap(self.rgb, rightMap1, rightMap2, interpolation=cv2.INTER_LINEAR)
+    #
+    #     flir_undistorted = cv2.undistort(self.flir, M1, D1)
+    #     rgb_undistorted = cv2.undistort(self.rgb, M2, D2)
+    #
+    #     # Undistort checkerboard centers
+    #     kpts_2D_undistorted = undistortPoints(self.kpts[0], M2, D2)
+    #     kpts_rectified = []
+    #     for k in self.kpts[0]:
+    #     # for k in kpts_2D_undistorted.squeeze():
+    #         y, x = k
+    #         y, x = int(y), int(x)
+    #         new_x = rightMap1[y, x]
+    #         new_y = rightMap2[y, x]
+    #         kpts_rectified.append([new_y, new_x])
+    #     kpts_rectified = np.array([kpts_rectified])
+    #     self.draw_kpts(rgb_rectified, kpts_rectified, self.radius)
+    #     while True:
+    #         cv2.imshow("RGB rectified", rgb_rectified)
+    #         cv2.imshow("FLir rectified", flir_rectified)
+    #
+    #         if cv2.waitKey(10) == ord("q"):
+    #             break
+    #     cv2.destroyAllWindows()
+    #     return True
+
+    def annotateIR(self):
+        calibFiles = os.path.join(self.data_dir, "calib")
+        with open(os.path.join(calibFiles, "stereo.json")) as f:
+            stereo = json.load(f)
+
+        M1 = np.array(stereo["Matrix1"])  # Flir Matrix
+        D1 = np.array(stereo["Dist1"])  # Flir Dist
+
+        R = np.array(stereo["R"])
+        T = np.array(stereo["T"])
+        k1, k2, p1, p2, k3 = D1
+        kpts_3D_IRView = np.array(self.kpts3D)
+
+        # Reformat T and R matrix
+        Ts = np.tile(T, (1, len(kpts_3D_IRView)))
+        Ts = Ts.T
+        R_inv = np.linalg.inv(R)
+
+        # Convert 3D skel. in Kinect view to IR view.
+        kpts_3D_IRView = kpts_3D_IRView - Ts
+        kpts_3D_IRView = np.matmul(R_inv, kpts_3D_IRView.T)
+
+        # Scale by Z, i.e. (X, Y, Z) becomes (X/Z, Y/Z, 1)
+        Zs = kpts_3D_IRView[2, :]
+        for i in range(kpts_3D_IRView.shape[0]):
+            kpts_3D_IRView[i, :] = kpts_3D_IRView[i,:]/Zs
+        kpts_2D_IRView_basic = np.matmul(M1, kpts_3D_IRView)
+
+        # Equations taken from OReilly learn openCV p376 And implementation can also be found in openCV source code
+        # for undistort:
+        # https://github.com/opencv/opencv_attic/blob/a6078cc8477ff055427b67048a95547b3efe92a5/opencv/modules/imgproc/src/undistort.cpp
+        # Here the difference is that we "distort" artificially. We do the same thing as in openCV source code,
+        # but the other way round.
+
+        Xs = kpts_3D_IRView[0, :]
+        Ys = kpts_3D_IRView[1, :]
+        X0 = Xs
+        Y0 = Ys
+        for j in range(5):
+            r2 = Xs**2 + Ys**2
+            scale = (1 + k1 * r2 + k2 * r2 ** 2 + k3 * r2 ** 3)
+            delta_x = 2 * p1 * Xs * Ys + p2 * (r2 + 2 * Xs ** 2)
+            delta_y = p1 * (r2 + 2 * Ys ** 2) + 2 * p2 * Xs * Ys
+
+            Xs = X0 * scale + delta_x
+            Ys = Y0 * scale + delta_y
+        kpts_3D_IRView[0, :] = Xs
+        kpts_3D_IRView[1, :] = Ys
+        # Project points back in 2D with the flir matrix
+        kpts_2D_IRView = np.matmul(M1, kpts_3D_IRView)
+        kpts_2D_IRView = kpts_2D_IRView[:2, :]  # Go from homogeneous back to normal
+
+        kpts_2D_IRView = kpts_2D_IRView.T
+        kpts_2D_IRView = np.expand_dims(kpts_2D_IRView, axis=0)
+
+        self.draw_kpts(self.flir, kpts_2D_IRView, self.radius)
+        self.kpts_IR = kpts_2D_IRView
+
+    def write_IR(self):
+        kpts_IR = self.kpts_IR[0]
+        for i, marker in enumerate(JOINTS):
+            self.json_dict_2D_IR[marker] = list(kpts_IR[i])
+        filePath = os.path.join(self.annotations_path_rgb, str(self.imageNum) + ".json")
+        with open(filePath, 'w') as f:
+            json.dump(self.json_dict_2D, f)
 
     def search_near(self, x, y, kpts):
         for obj in range(kpts.shape[0]):
             for i, el in enumerate(kpts[obj]):
-                if i > 20:
-                    break
                 range_x = [el[0] - self.radius + 2, el[0] + self.radius + 2]
                 range_y = [el[1] - self.radius + 2, el[1] + self.radius + 2]
                 if range_x[0] <= x <= range_x[1] and range_y[0] <= y <= range_y[1]:
@@ -269,42 +470,33 @@ class Noter():
 
     def click_left(self, event, x, y, flags, param):
         name = param[0]
-        img = param[1]
+        rgb = param[1]
         kpts = param[2]
         if event == cv2.EVENT_LBUTTONDOWN:
             if self.is_modifying is False:
                 if self.is_clicked is True:
+                    # If a point is already selected
                     self.is_clicked = False
                     self.is_modifying = True
-                    old_x, old_y = self.point
-                    self.point = [-1, -1]
+                    old_x, old_y = self.selectedPoint
+                    self.selectedPoint = [-1, -1]
                     for obj in range(kpts.shape[0]):
                         for el in kpts[obj]:
                             if int(el[0]) == old_x and int(el[1]) == old_y:
                                 el[0] = x
                                 el[1] = y
                                 break
-                    cv2.circle(img, (x, y), self.radius, (0, 0, 255), -1)
-                    cv2.imshow(name, img)
-                elif self.is_adding_joint is True:
-                    kpts[self.obj_idx][self.kpt_idx][0] = x
-                    kpts[self.obj_idx][self.kpt_idx][1] = y
-                    cv2.circle(img, (x, y), self.radius, (0, 255, 255), -1)
-                    cv2.imshow(name, img)
-                    self.error.set("{} added.".format(JOINTS[self.kpt_idx]))
-                    self.master.update()
-                    self.is_modifying = True
-                    self.is_adding_joint = False
-                    self.kpt_idx = -1
-                    self.obj_idx = -1
+                    cv2.circle(rgb, (x, y), self.radius, (0, 0, 255), -1)
+                    cv2.imshow(name, rgb)
                 else:
-                    if tuple(img[y, x]) in JOINTS_COLOR:
+                    # If a point was never selected. We color it in red and save it in self.point
+                    if tuple(rgb[y, x]) in JOINTS_COLOR:
                         new_x, new_y = self.search_near(x, y, kpts)
                         if new_y > 0 and new_x > 0:
-                            cv2.circle(img, (new_x, new_y), self.radius, (0, 0, 255), -1)
+                            cv2.circle(rgb, (new_x, new_y), self.radius, (0, 0, 255), -1)
                             self.is_clicked = True
-                            self.point = [new_x, new_y]
-                            cv2.imshow(name, img)
+                            self.selectedPoint = [new_x, new_y]
+                            cv2.imshow(name, rgb)
             else:
                 self.error.set("Confirm modfying?")
                 self.master.update()
@@ -329,9 +521,7 @@ class Noter():
     def downscale(self, img=None, kpts=None):
         return self.__resize(img, kpts, 1 / self.scale)
 
-
 def json_to_trc(json_path, template_trc_path, target_trc_path):
-
     with open(json_path, 'r') as f:
         json_dict = json.load(f)
     markers = list(json_dict.keys())
@@ -377,18 +567,18 @@ def json_to_trc(json_path, template_trc_path, target_trc_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_dir', type=str, dest='data_dir', help='Data directory.', required=True)
-    parser.add_argument('--kpts_in', default=None, help="Pre-saved keypoints")
-    parser.add_argument('--kpts_out', type=str, default='../output/annotations3D.json', dest='kpts_out',
-                        help='Output file path')
+    parser.add_argument('--data_dir', type=str, dest='data_dir', help='Data directory.', required=False)
     parser.add_argument('--scale', type=float, default=1, dest='scale', help='Depth image scale.')
     parser.add_argument('--radius', type=int, default=6, dest='radius', help='Joint annotation radius.')
 
     args = parser.parse_args().__dict__
 
-    noter = Noter(args['kpts_out'], args["scale"], args["radius"], args["kpts_in"])
-    noter.annotate(args['data_dir'])
+    data_dir = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\sandbox\results\Oliv mille - 22 mars"
+    noter = Noter(data_dir, 200, args["scale"], args["radius"])
+    noter.annotate()
 
-    template_trc = "../../openSim/scaling/template_static_scale.trc"
-    target_trc = "../output/custom.trc"
-    json_to_trc(args['kpts_out'], template_trc, target_trc)
+    # template_trc = "../../openSim/scaling/template_static_scale.trc"
+    # target_trc = "../output/custom.trc"
+    # json_to_trc(args['kpts2D_outputPath'], template_trc, target_trc)
+    noter.viz3D()
+

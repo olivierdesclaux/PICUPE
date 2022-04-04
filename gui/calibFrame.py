@@ -1,14 +1,14 @@
-import sys
 import tkinter as tk
 from tkinter import filedialog
 from tkinter import ttk
 import os
 import cv2.cv2 as cv2
 import json
-# sys.path.append("../Recalage")
-# sys.path.append("../utils")
-from Recalage.calibrate import calibrateCamera
-from Recalage.stereocalibration import stereoCalibrate, rectify
+import threading
+
+from Recalage.calibrate import Calibrator
+from Recalage.stereocalibration import StereoCalibrator
+from utils.myLogger import Logger
 
 
 class calibFrame(ttk.LabelFrame):
@@ -39,7 +39,6 @@ class calibFrame(ttk.LabelFrame):
         self.directory.set(newDir)
 
     def updateCalibDirectory(self):
-        print(self.directory)
         self.label = ttk.Label(self, text=self.directory)
         self.label.grid(column=0, row=3, columnspan=3)
         self.label.configure(text=self.directory)
@@ -72,10 +71,15 @@ class calibWindow(tk.Frame):
     def makeStereoCalibFrame(self, row, column):
         self.stereoCalibFrame = ttk.LabelFrame(self.window, text="Stereo Calibration Parameters")
         self.stereoCalibFrame.grid(row=row, column=column, pady=10, sticky=tk.W)
-        self.stereoCalibGrids = tk.IntVar()
-        self.stereoCalibGrids.set(20)
+        self.stereoInitialGrids = tk.IntVar()
+        self.stereoInitialGrids.set(20)
         self.l3 = tk.Label(self.stereoCalibFrame, text="Number of initial Grids").grid(row=0, column=0)
-        self.e3 = tk.Entry(self.stereoCalibFrame, textvariable=self.stereoCalibGrids).grid(row=0, column=1)
+        self.e3 = tk.Entry(self.stereoCalibFrame, textvariable=self.stereoInitialGrids).grid(row=0, column=1)
+
+        self.stereoMinGrids = tk.IntVar()
+        self.stereoMinGrids.set(15)
+        self.l4 = tk.Label(self.stereoCalibFrame, text="Number of minimal Grids").grid(row=1, column=0)
+        self.e4 = tk.Entry(self.stereoCalibFrame, textvariable=self.stereoMinGrids).grid(row=1, column=1)
 
     def makeFlirCalibFrame(self, row, column):
         self.flirCalibFrame = ttk.LabelFrame(self.window, text="FLIR Calibration Parameters")
@@ -103,49 +107,13 @@ class calibWindow(tk.Frame):
         self.config = {}
         self.window.destroy()
 
-    def launchCalib(self):
-        print("Launching Calib")
-        expName = self.parent.parent.experimentFrame.getExpName()
-        # saveDir = self.parent.parent.experimentFrame.getSaveDir()
-        savePathCalib = createCalibDirectory(self.parent.calibrationSaveDirectory, expName)
-        calibConfig = {
-            "calibInitialGrids": self.calibInitialGrids.get(),
-            "calibMinGrids": self.calibMinGrids.get(),
-            "kinectCalib": self.kinectCalibFile.get(),
-            "stereocalibInitialGrids": self.stereoCalibGrids.get()}
-        # self.config = calibConfig
-        #
-        # Ne pas oublier de sauvegarder les résultats de calibration et d'updater le fichier dans calibFrame
-        flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
-        stereoFlags = cv2.CALIB_FIX_INTRINSIC
-
-        calibConfig["flirCalib"] = calibrateCamera("F", savePathCalib, flirCalibFlags, initialNumGrids=calibConfig[
-            "calibInitialGrids"], minNumGrids=calibConfig["calibMinGrids"])
-
-        calibConfig["stereoCalibrationFile"] = stereoCalibrate("FK", calibConfig["flirCalib"], calibConfig[
-            "kinectCalib"], savePathCalib, stereoFlags, initialNumGrids=calibConfig["stereocalibInitialGrids"])
-
-        # Compute rectification matrices
-        rectify(savePathCalib)
-
-        # savePathCalib = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Results\Calibration Directories\test1\calib"
-        self.calibConfig = calibConfig
-
-        with open(os.path.join(savePathCalib, "calibParameters.json"), 'w') as file:
-            json.dump(self.calibConfig, file, indent=4)
-
-        self.getConfigData()
-        self.parent.directory.set(savePathCalib)
-        # self.parent.updateCalibDirectory()
-        self.window.destroy()
-
     def makeKinectCalibFrame(self, row, column, columnspan):
         self.kinectFrame = ttk.LabelFrame(self.window, text="Kinect Calibration Parameters")
         self.kinectFrame.grid(row=row, column=column, columnspan=columnspan, pady=10, sticky=tk.W)
 
         self.kinectCalibFile = tk.StringVar()
-        self.kinectCalibFile.set(r"C:\Users\Recherche\OneDrive - "
-                                 r"polymtl.ca\PICUPE\Recalage\Results\CalibKinectFactory5Dist.json")
+        self.kinectCalibFile.set(r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\kinect "
+                                 r"Calib\kinectCalib.json")
         self.kinectLabel = ttk.Label(self.kinectFrame, textvariable=self.kinectCalibFile)
         self.kinectLabel.grid(column=0, row=0)
         self.kinectLabel.configure(text=self.kinectCalibFile)
@@ -159,6 +127,59 @@ class calibWindow(tk.Frame):
         newKinectCalibFile = filedialog.askopenfilename(initialdir=initialDir, title="Select A Calibration Directory",
                                                         filetypes=[("json", ".json")])
         self.kinectCalibFile.set(newKinectCalibFile)
+
+    def launchCalib(self):
+        expName = self.parent.parent.experimentFrame.getExpName()
+        savePathCalib = createCalibDirectory(self.parent.calibrationSaveDirectory, expName)
+        calibConfig = {
+            "calibInitialGrids": self.calibInitialGrids.get(),
+            "calibMinGrids": self.calibMinGrids.get(),
+            "kinectCalib": self.kinectCalibFile.get(),
+            "stereoInitialGrids": self.stereoInitialGrids.get(),
+            "stereoMinGrids": self.stereoMinGrids.get()}
+
+        # Initialise logger
+        logger = Logger(savePathCalib, "calib.log")
+        listener = threading.Thread(target=logger.logWriter, daemon=True)
+        listener.start()
+
+        # FLIR CALIBRATION
+        flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_FIX_ASPECT_RATIO + cv2.CALIB_FIX_K3
+        initialGuess = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\FLIRCalibration\flirCalib" \
+                       r".json "
+
+        logger.log("STARTING FLIR CALIBRATION")
+        calibrator = Calibrator(savePathCalib, "flir", flirCalibFlags, initialGuess, logger,
+                                initialGrids=calibConfig["calibInitialGrids"], minGrids=calibConfig["calibMinGrids"])
+        calibConfig["flirCalib"] = calibrator.performCalibration()
+        if calibrator.aborted:
+            self.window.destroy()
+            return
+
+        # STEREOCALIBRATION
+        logger.log("")
+        logger.log("STARTING STEREOCALIBRATION")
+        calibFiles = [calibConfig["flirCalib"], calibConfig["kinectCalib"]]
+        cameras = ["flir", "kinect"]
+        stereoCalibrator = StereoCalibrator(savePathCalib, cameras, calibFiles, logger,
+                                            initialGrids=calibConfig["stereoInitialGrids"],
+                                            minGrids=calibConfig["stereoMinGrids"])
+        stereoCalibrator.performStereocalibration()
+
+        if stereoCalibrator.aborted:
+            self.window.destroy()
+            return
+
+        # SAVE PARAMETERS AND RESULTS
+        self.calibConfig = calibConfig
+
+        with open(os.path.join(savePathCalib, "calibParameters.json"), 'w') as file:
+            json.dump(self.calibConfig, file, indent=4)
+        self.getConfigData()
+        self.parent.directory.set(savePathCalib)
+        logger.stop()
+        listener.join()
+        self.window.destroy()
 
 
 def createCalibDirectory(resultsDir, saveName):

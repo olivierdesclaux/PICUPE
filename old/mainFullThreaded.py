@@ -12,8 +12,8 @@ import argparse
 sys.path.append('./Python-Recalage')
 sys.path.append('./XSens')
 
-import videostream
-from utils import extractDepth
+from old import videostream
+from cameraUtils import extractDepth
 import MTwFunctions as mtw
 
 

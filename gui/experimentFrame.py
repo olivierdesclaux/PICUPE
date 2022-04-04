@@ -22,7 +22,7 @@ class experimentFrame(ttk.LabelFrame):
         self.l2.grid(column=0, row=2)
         self.l2.configure(text="Save Directory")
         self.saveDirVar = tk.StringVar()
-        self.saveDirVar.set(r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Results")
+        self.saveDirVar.set(r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\sandbox\results")
         self.saveDir = self.getSaveDir()
         self.saveDirEntry = tk.Entry(self, textvariable=self.saveDirVar)
         self.saveDirEntry.grid(row=2, column=1)
@@ -34,9 +34,10 @@ class experimentFrame(ttk.LabelFrame):
 
     def browseSaveDir(self):
         initialDir = r"C:\Users\Recherche\OneDrive - polymtl.ca"
-        self.saveDir = filedialog.askdirectory(initialdir=initialDir, title="Select A Save Directory")
+        newsaveDir = filedialog.askdirectory(initialdir=initialDir, title="Select A Save Directory")
         # self.label = ttk.Label(self, text="")
-        self.saveDirVar.set(self.saveDir)
+        if newsaveDir != "":
+            self.saveDirVar.set(newsaveDir)
 
     def getDefaultName(self):
         self.experimentName = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")

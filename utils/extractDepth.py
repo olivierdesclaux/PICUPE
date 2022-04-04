@@ -1,4 +1,4 @@
-import cv2
+import cv2.cv2 as cv2
 from typing import Optional, Tuple
 import numpy as np
 

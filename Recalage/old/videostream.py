@@ -3,7 +3,7 @@ from enum import Enum
 import cv2.cv2 as cv2
 import pyk4a as k4a
 import sys
-sys.path.append("..")
+sys.path.append("../..")
 from utils.readerWriterClass import findCameraPort
 
 class VideoStream:

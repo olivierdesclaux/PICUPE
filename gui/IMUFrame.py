@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
-
+from XSens.MTwManager import MTwManager
 
 class IMUFrame(ttk.LabelFrame):
     def __init__(self, parent, row, column, rowspan, columnspan):
@@ -43,11 +43,12 @@ class IMUFrame(ttk.LabelFrame):
 
         self.checkButtonFrame = ttk.Frame(self)
         self.checkButtonFrame.grid(row=3, column=0)
-        self.checkButton = ttk.Button(self.checkButtonFrame, text="Test IMU", command=self.testIMU)
+        self.checkButton = ttk.Button(self.checkButtonFrame, text="Test IMU Station", command=self.testIMU)
         self.checkButton.grid(row=0, column=0)
 
     def testIMU(self):
-        selectedIMUs = [imu for imu in self.IMUs if self.IMUs[imu].get() == 1]
+        manager = MTwManager([], "", None)
+        manager.test()
 
 
     def addCheckBox(self, frame, IMUName, IMUVar, row, col):

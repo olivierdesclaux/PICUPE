@@ -4,11 +4,11 @@ from datetime import datetime
 import os
 import sys
 # Local modules
-sys.path.append("../")
-from Recalage.videostream import selectStreams, selectStreams2
+sys.path.append("../../")
+from old.videostream import selectStreams2
 from Recalage.circledetector import CircleDetector
 from Recalage.calibrationhandler import CalibrationHandler
-from Recalage.circlegridfinder import CircleGridFinder
+from old.circlegridfinder import CircleGridFinder
 from Recalage.cameraUtils import stop
 
 
@@ -126,7 +126,7 @@ if __name__ == '__main__':
     # Initialise directory with Date and Time in name
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M")
-    saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
+    saveDirectory = os.path.join("../../sandbox/results", cameraType + "_" + dt_string)
     # Starts true program
     # flirCalibFlags = cv2.CALIB_USE_INTRINSIC_GUESS + cv2.CALIB_ZERO_TANGENT_DIST + cv2.CALIB_FIX_K3
     initialGuess = r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\CalibKinectFactory5Dist.json"

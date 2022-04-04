@@ -8,7 +8,7 @@ import json
 from videostream import selectStreams
 from cameraUtils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder
 from circledetector import CircleDetector
-from circlegridfinder import CircleGridFinder
+from old.circlegridfinder import CircleGridFinder
 
 
 def main(camerasToOpen, calibFile1, calibFile2,
@@ -186,5 +186,5 @@ if __name__ == '__main__':
     # Get current time and create Results path from time
     now = datetime.now()
     dt_string = now.strftime("%d-%m-%Y_%H-%M")
-    saveDirectory = os.path.join("Results", cameraType + "_" + dt_string)
+    saveDirectory = os.path.join("../../sandbox/results", cameraType + "_" + dt_string)
     main(cameraType, file1, file2, saveDirectory)

@@ -12,10 +12,10 @@ class CalibrationHandler:
 
     Attributes
     ----------
-    objectPositions : list of float points
+    positions3D : list of float points
         Positions in 3D space of the circles of a grid. 
         Can be relative (i.e. first circle is 0, 0)
-    imagePositions : list of float points
+    positions2D : list of float points
         Positions in image (pixels) of grid circles
     imageSize : int, int
         Width and height of image in pixels
@@ -61,13 +61,16 @@ class CalibrationHandler:
         Returns length of objectPositions, aka number of grids remaining
     """
 
-    def __init__(self, objectPositions, imagePositions, imageSize, minimumImages, maximumPointError, flags):
-        self.objectPositions = objectPositions
-        self.imagePositions = imagePositions
+    def __init__(self, positions3D, positions2D, imageSize, minimumImages, maximumPointError, flags, initialGuess,
+                 logger):
+        self.positions3D = positions3D
+        self.positions2D = positions2D
         self.imageSize = imageSize
+        self.initialImagesNum = len(self.positions3D)
         self.minimumImages = minimumImages
         self.maximumPointError = maximumPointError
         self.retroprojectionError = np.inf
+        self.logger = logger
         self.cameraMatrix = []
         self.rotation = []
         self.translation = []
@@ -75,7 +78,7 @@ class CalibrationHandler:
         self.flags = flags
         # Calibration marked as incomplete
         self.calibrationDone = False
-
+        self.initialGuess = initialGuess
         # Keeps track of errors for graphic display
         self.x, self.y = [], []
         self.xError, self.yError, self.absError = [], [], []
@@ -95,23 +98,18 @@ class CalibrationHandler:
             the calibration is impossible
         """
         # Checks that there are sufficient images remaining to perform an adequate calibration
-        if len(self.objectPositions) >= self.minimumImages:
+        if len(self.positions3D) >= self.minimumImages:
             # Calculates calibration parameters
-
-            intrinsicsGuess, _ = openCalibrationFile(r"C:\Users\Recherche\OneDrive - polymtl.ca\PICUPE\Recalage\Results\CalibFLIRInitialGuess.json")
-            # flags = cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_USE_INTRINSIC_GUESS
-
-            # intrinsicsGuess = None
-            # flags = cv2.CALIB_RATIONAL_MODEL
+            intrinsicsGuess, distGuess = openCalibrationFile(self.initialGuess)
 
             self.retroprojectionError, self.cameraMatrix, self.distortion, self.rotation, self.translation = \
-                cv2.calibrateCamera(self.objectPositions, self.imagePositions, self.imageSize, intrinsicsGuess, None,
+                cv2.calibrateCamera(self.positions3D, self.positions2D, self.imageSize, intrinsicsGuess, distGuess,
                                     flags=self.flags)
-            # Rational model uses 8 params, but 12 are returned (last 4 are 0)
-            # self.distortion = self.distortion[:, 0:8]
-            # Checks for outliers using calibration parameters
+
             self.calibrationDone = self.computeErrors()
         else:
+            if self.logger is not None:
+                self.logger.log("Removed {} images".format(self.initialImagesNum - len(self.positions3D)))
             self.calibrationDone = False
 
         return self.calibrationDone
@@ -138,9 +136,9 @@ class CalibrationHandler:
         redoCalibration = False
         # Iterates through each image to calculate x and y errors 
         # of all corners
-        for index, imagePosOld in enumerate(self.imagePositions):
+        for index, imagePosOld in enumerate(self.positions2D):
             # Retroprojects 3D objects to 2D pixel positions in image
-            imagePosNew, _ = cv2.projectPoints(self.objectPositions[index], self.rotation[index],
+            imagePosNew, _ = cv2.projectPoints(self.positions3D[index], self.rotation[index],
                                                self.translation[index], self.cameraMatrix, self.distortion)
             # Convert list of initially detected points and their 2D reprojections into numpy arrays
             imagePosOld = np.array(imagePosOld).squeeze()
@@ -162,12 +160,9 @@ class CalibrationHandler:
                 self.xError.append(imagePosNew[:, 0].ravel() - imagePosOld[:, 0].ravel())
                 self.yError.append(imagePosNew[:, 1].ravel() - imagePosOld[:, 1].ravel())
 
-        # Deletes all outlier frames,
-        # in reverse order to prevent dynamic modification of indices
-        for index in reversed(indexesToPop):
-            self.imagePositions.pop(index)
-            self.objectPositions.pop(index)
-        # indexesToPop = []
+        # Deletes all outlier frames
+        self.positions2D = [self.positions2D[i] for i in range(len(self.positions2D)) if i not in indexesToPop]
+        self.positions3D = [self.positions3D[i] for i in range(len(self.positions3D)) if i not in indexesToPop]
 
         if redoCalibration:
             # Performs calibrate() and computeErrors() recursively,
@@ -200,7 +195,8 @@ class CalibrationHandler:
         # Checks that error values exist to avoid crashing
         if self.calibrationDone:
             # Overall error printed to command line
-            print("Average retroprojection error :", round(self.retroprojectionError, 3))
+            if self.logger is not None:
+                self.logger.log("Average retroprojection error : {}".format(round(self.retroprojectionError, 3)))
 
             # side-by-side axes that cover screen
             fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -254,12 +250,13 @@ class CalibrationHandler:
             # Uses NumpyEncoder to convert numpy values to regular arrays
             # for json.dump
             json.dump(dumpDictionary, file, indent=4, cls=NumpyEncoder)
-            print("Succesfully wrote calibration to file.")
+            if self.logger is not None:
+                self.logger.log("Succesfully wrote calibration to file.")
 
         return filename
 
 
     def len(self):
-        """ Returns length of objectPositions, aka number of grids remaining
+        """ Returns length of positions3D, aka number of grids remaining
         """
-        return len(self.objectPositions)
+        return len(self.positions3D)

@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime
 import os
 import time
@@ -8,89 +9,137 @@ from utils.extractDepth import colorize
 import numba as nb
 import XSens.MTwFunctions as mtw
 from XSens.MTwManager import MTwManager
+import multiprocessing
 
 
 ########################################################################################################################
-############################################### WEBCAM #################################################################
+############################################### WEBCAM/FLIR ############################################################
 ########################################################################################################################
 
-class Webcam:
-    def __init__(self, portNum, webcamQueue, keepGoing, webcamQueueSize, cameraStatus, logger, savePath):
-        self.portNum = portNum
-        self.webcamQueue = webcamQueue
-        self.keepGoing = keepGoing
-        self.webcamQueueSize = webcamQueueSize
-        self.cameraStatus = cameraStatus
-        self.logger = logger
-        self.savePath = savePath
-        self.cam = None
+class FLIR:
+    def __init__(self, name, portNum, keepGoing, cameraStatus, logger, savePath, barrier):
+        self.name = name  # flir or webcam
+        self.portNum = portNum  # Associated port number
+        self.queue = multiprocessing.Queue()  # For putting and getting frames
+        self.queueSize = multiprocessing.Value('i', 0)  # Counter for knowing the queue size
+        self.keepGoing = keepGoing  # Shared variable between process to make processes continue
+        self.cameraStatus = cameraStatus  # Shared variable between processes. 0 if camera is not ready, 1 otherwise
+        self.logger = logger  # For logging purposes
+        self.savePath = savePath  # Directory to write images
+        self.cam = None  # Initialise camera object
+        self.barrier = barrier  # Shared with other camera process to ensure synchronization
+        self.writingCounter = 0  # Initialise counter. Images will have name 00000, 00001, 00002
+        self.textFile = None  # Text file for writing timestamps
+
+    def initCam(self):
+        """
+        Launches camera (flir or webcam) using opencv VideoCapture.
+        Stores VideoCapture object in self.cam
+
+        Returns
+        -------
+        None
+        """
+        if self.name == "webcam":
+            cam = cv2.VideoCapture(self.portNum, cv2.CAP_DSHOW)
+            cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self.cam = cam
+
+        elif self.name == "flir":
+            cam = cv2.VideoCapture(self.portNum, cv2.CAP_DSHOW)
+            cam.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
+            cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
+            cam.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
+            self.cam = cam
+        else:
+            raise Exception("Invalid camera name")
 
     def read(self):
-        cam = cv2.VideoCapture(self.portNum, cv2.CAP_DSHOW)
-        self.cam = cam
-        self.cameraStatus[0] = 1
+        """
+        Function that will be processed in the main. Reads frames, puts them in the queue and then waits for other
+        camera at a barrier.
+        Returns
+        -------
+
+        """
+        self.initCam()
+        self.cameraStatus[0] = 1  # Inform other processes that camera was initialised and is ready
+
+        ret, oldFrame = self.cam.read()  # Read frame
+        oldTimestamp = datetime.now()  # Get associated timestamp
+        self.queue.put([oldFrame, oldTimestamp])  # Put them both in the queue
+        with self.queueSize.get_lock():
+            self.queueSize.value += 1  # Update queue size
+        cnt = 1
 
         while np.sum(self.cameraStatus) < len(self.cameraStatus):
-            continue
+            continue  # Wait for all other processes to be ready
 
-        # print("Webcam is Recording...")
-        self.logger.log("Webcam is Recording...")
-        t1 = time.time()
-        timestamp = datetime.now()
-        ret, oldFrame = cam.read()
-        self.webcamQueue.put([oldFrame, timestamp])
-        with self.webcamQueueSize.get_lock():
-            self.webcamQueueSize.value += 1
-        cnt = 1
+        self.logger.log("{} is Recording...".format(self.name))
+        t1 = time.time()  # For computing FPS
+
+        # self.barrier.wait()  # Wait for kinect before grabbing next frame
         while self.keepGoing.value:
+            self.cam.grab()
             timestamp = datetime.now()
-            ret, newFrame = cam.read()  # grab new frame
+            ret, newFrame = self.cam.retrieve()  # grab and retrieve more efficient than cam.read()
             if not ret:
                 break
-            if are_identical(oldFrame, newFrame):
-                continue
             else:
-                self.webcamQueue.put([newFrame, timestamp])
+                self.queue.put([newFrame, timestamp])  # Put frame in queue
                 cnt += 1
-                with self.webcamQueueSize.get_lock():
-                    self.webcamQueueSize.value += 1
-            oldFrame = newFrame
-        t = time.time() - t1
+                with self.queueSize.get_lock():  # Update queue size
+                    self.queueSize.value += 1
+            self.barrier.wait()  # Wait for kinect
 
+        t = time.time() - t1
         self.cam.release()
         cv2.destroyAllWindows()
-        self.logger.log("Finished Webcam acquisition. Put {} frames in the queue".format(cnt))
+        self.logger.log("Finished {} acquisition. Put {} frames in the queue".format(self.name, cnt))
         self.logger.log("Webcam acquisition lasted {}s".format(round(t, 3)))
-        self.logger.log("Overall Webcam FPS: {}".format(round(cnt / t, 3)))
+        self.logger.log("Overall {} FPS: {}".format(self.name, round(cnt / t, 3)))
 
     def close(self):
-        self.logger.log("Closing Webcam...")
+        """
+        Closes camera object and destroys all potential existing windows
+        Returns
+        -------
+        None
+        """
         if self.cam:
             self.cam.release()
             cv2.destroyAllWindows()
 
     def write(self):
-        cnt = 0  # Initialise counter. Images will have name 00000, 00001, 00002
-        textFile = open(os.path.join(self.savePath, "timestamps.txt"), "a")
+        """
+        Grabs frames stored in the shared queue and stores them as .npy files.
+        Returns
+        -------
+        None
+        """
+        self.textFile = open(os.path.join(self.savePath, "timestamps.txt"), "a")  # Open text file
         while True:
             try:
-                [frame, timestamp] = self.webcamQueue.get_nowait()
-                name = str(cnt).zfill(5)  # Convert counter to string with zeros in front. e.g. 12 becomes 00012
+                [frame, timestamp] = self.queue.get_nowait()
+                name = str(self.writingCounter).zfill(5)  # Convert counter to string with zeros in front. e.g. 12
+                # becomes 00012
                 with open(os.path.join(self.savePath, name), 'wb') as f:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
-                textFile.write("{}\n".format(timestamp))  # Add timestamp to the .txt file
-                cnt += 1
-                with self.webcamQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment by
+                self.textFile.write("{}\n".format(timestamp))  # Add timestamp to the .txt file
+                self.writingCounter += 1
+                with self.queueSize.get_lock():  # Have to access lock otherwise it could miss the increment by
                     # the reader
-                    self.webcamQueueSize.value -= 1  # Decrement the queue size
-
+                    self.queueSize.value -= 1  # Decrement the queue size
             except Exception as e:
-                if self.keepGoing.value or self.webcamQueueSize.value > 0:
+                # If you can't grab a new frame, check that the main is still running and that the queue isn't empty.
+                # If none of these conditions are met, terminate.
+                if self.keepGoing.value or self.queueSize.value > 0:
                     continue
                 else:
                     break
-        textFile.close()
-        self.logger.log("Finished Webcam writing. Grabbed {} frames in the queue".format(cnt))
+
+        self.textFile.close()
+        self.logger.log("Finished Webcam writing. Grabbed {} frames in the queue".format(self.writingCounter))
 
 
 ########################################################################################################################
@@ -98,196 +147,179 @@ class Webcam:
 ########################################################################################################################
 
 class Kinect:
-    def __init__(self, kinectRGBQueue, kinectDepthQueue, keepGoing, kinectRGBQueueSize, kinectDepthQueueSize,
-                 cameraStatus, logger, savePathRGB, savePathDepth):
-        self.kinectRGBQueue = kinectRGBQueue
-        self.kinectDepthQueue = kinectDepthQueue
-        self.keepGoing = keepGoing
-        self.kinectRGBQueueSize = kinectRGBQueueSize
-        self.kinectDepthQueueSize = kinectDepthQueueSize
-        self.cameraStatus = cameraStatus
-        self.logger = logger
-        self.savePathRGB = savePathRGB
-        self.savePathDepth = savePathDepth
-        self.kinect = None
+    def __init__(self, keepGoing, cameraStatus, logger, savePathRGB, savePathDepth, barrier):
+        self.RGBQueue = multiprocessing.Queue()  # For putting and getting RGB frames
+        self.DepthQueue = multiprocessing.Queue()  # For putting and getting depth frames
+        self.RGBQueueSize = multiprocessing.Value('i', 0)  # For counting queue size
+        self.DepthQueueSize = multiprocessing.Value('i', 0)  # For counting queue size
 
-    def read(self):
+        self.keepGoing = keepGoing  # Shared variable between process to make processes continue
+        self.cameraStatus = cameraStatus  # Shared variable between processes. 0 if camera is not ready, 1 otherwise
+        self.logger = logger  # For logging purposes
+        self.savePathRGB = savePathRGB  # For writing rgb images
+        self.savePathDepth = savePathDepth  # For writing depth images
+        self.kinect = None  # Will store pyk4a kinect object
+        self.barrier = barrier  # For synchro with Flir
+        self.writingCounterRGB = 0  # For naming the saved images
+        self.writingCounterDepth = 0
+        self.frame = None
+        self.timestamp = datetime.now()
+
+    def update(self):
         kinect = k4a.PyK4A(k4a.Config(
             color_resolution=k4a.ColorResolution.RES_720P,
             depth_mode=k4a.DepthMode.NFOV_UNBINNED,
             camera_fps=k4a.FPS.FPS_30,
             synchronized_images_only=True, ))
         kinect.start()
+
+        self.kinect = kinect
+        self.frame = self.kinect.get_capture()
+        self.timestamp = datetime.now()
+
+        while self.keepGoing.value:
+            self.frame = self.kinect.get_capture()
+            self.timestamp = datetime.now()
+            cv2.waitKey(1)
+
+    def read2(self):
+        updateThread = threading.Thread(target=self.update, daemon=True)
+        updateThread.start()
+
+        self.cameraStatus[1] = 1
+        while np.sum(self.cameraStatus) < len(self.cameraStatus):
+            continue
+
+        self.logger.log("Kinect is Recording...")
+        while self.keepGoing.value:
+            newFrame = self.frame
+            self.RGBQueue.put([newFrame.color, self.timestamp])
+            self.DepthQueue.put([newFrame.transformed_depth, self.timestamp])
+
+            with self.DepthQueueSize.get_lock():
+                self.DepthQueueSize.value += 1  # Update queue size
+            with self.RGBQueueSize.get_lock():
+                self.RGBQueueSize.value += 1  # Update queue size
+
+            self.barrier.wait()
+
+        updateThread.join()
+
+    def read(self):
+        """
+        Initialise kinect camera object. Processed in main to continuously read images and put them in adequate queues.
+        Returns
+        -------
+        None
+        """
+        kinect = k4a.PyK4A(k4a.Config(
+            color_resolution=k4a.ColorResolution.RES_720P,
+            depth_mode=k4a.DepthMode.NFOV_UNBINNED,
+            camera_fps=k4a.FPS.FPS_30,
+            synchronized_images_only=True, ))
+        kinect.start()
+
         self.kinect = kinect
         self.cameraStatus[1] = 1
 
+        oldTimestamp = datetime.now()
+        oldFrame = kinect.get_capture()
+        self.RGBQueue.put([oldFrame.color, oldTimestamp])
+        self.DepthQueue.put([oldFrame.transformed_depth, oldTimestamp])
+        with self.DepthQueueSize.get_lock():
+            self.DepthQueueSize.value += 1  # Update queue size
+        with self.RGBQueueSize.get_lock():
+            self.RGBQueueSize.value += 1  # Update queue size
+
+        cnt = 1  # Counter to compute the FPS (verbosity)
         while np.sum(self.cameraStatus) < len(self.cameraStatus):
             continue
         self.logger.log("Kinect is Recording...")
         t1 = time.time()
-        timestamp = datetime.now()
-        oldFrame = kinect.get_capture()
-        self.kinectRGBQueue.put([oldFrame.color, timestamp])
-        self.kinectDepthQueue.put([oldFrame.transformed_depth, timestamp])
-        with self.kinectDepthQueueSize.get_lock():
-            self.kinectDepthQueueSize.value += 1
-        with self.kinectRGBQueueSize.get_lock():
-            self.kinectRGBQueueSize.value += 1
-        cnt = 1  # Counter to compute the FPS (verbosity)
+
+        newFrame = self.kinect.get_capture()
+        while True:
+            f = self.kinect.get_capture_timeout(0)
+            if f is None:
+                break
+
         while self.keepGoing.value:
+            newFrame = self.kinect.get_capture()
+            while True:
+                f = self.kinect.get_capture_timeout(5)
+                if f is None:
+                    break
+                else:
+                    newFrame = f
+
             timestamp = datetime.now()
-            newFrame = kinect.get_capture()  # grab new frame
-            if are_identical(oldFrame.depth, newFrame.depth):  # check if new depth is identical to the previous depth
-                continue
-            else:  # if not, we put it in the queue for writing
-                self.kinectRGBQueue.put([newFrame.color, timestamp])
-                self.kinectDepthQueue.put([newFrame.transformed_depth, timestamp])
-                cnt += 1
-                with self.kinectDepthQueueSize.get_lock():
-                    self.kinectDepthQueueSize.value += 1
-                with self.kinectRGBQueueSize.get_lock():
-                    self.kinectRGBQueueSize.value += 1
-            oldFrame = newFrame
+
+            self.RGBQueue.put([newFrame.color, timestamp])
+            self.DepthQueue.put([newFrame.transformed_depth, timestamp])
+            cnt += 1
+            with self.DepthQueueSize.get_lock():
+                self.DepthQueueSize.value += 1
+            with self.RGBQueueSize.get_lock():
+                self.RGBQueueSize.value += 1
+            self.barrier.wait()
+
         t = time.time() - t1
-        # kinect.stop()
 
         self.logger.log("Finished Kinect acquisition. Put {} frames in the queue".format(cnt))
         self.logger.log("Kinect acquisition lasted {}s".format(round(t, 3)))
         self.logger.log("Overall Kinect FPS: {}".format(round(cnt / t, 3)))
 
     def writeRGB(self):
-        cnt = 0  # Initialise counter. Images will have name 00000, 00001, 00002
         textFile = open(os.path.join(self.savePathRGB, "timestamps.txt"), "a")
         while True:
             try:
-                [frame, timestamp] = self.kinectRGBQueue.get_nowait()
-                name = str(cnt).zfill(5)  # Convert counter to string with zeros in front. e.g. 12 becomes 00012
-                # frame = cv2.cvtColor(frame[:, :, :3], cv2.COLOR_BGR2RGB)
+                [frame, timestamp] = self.RGBQueue.get_nowait()
+                name = str(self.writingCounterRGB).zfill(
+                    5)  # Convert counter to string with zeros in front. e.g. 12 becomes 00012
                 with open(os.path.join(self.savePathRGB, name), 'wb') as f:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
                 textFile.write("{}\n".format(timestamp))  # Add timestamp to the .txt file
-                cnt += 1
-                with self.kinectRGBQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment
-                    # by the
-                    # reader
-                    self.kinectRGBQueueSize.value -= 1  # Decrement the queue size
+                self.writingCounterRGB += 1
+                with self.RGBQueueSize.get_lock():  # Have to access lock otherwise it could miss the increment
+                    # by the reader
+                    self.RGBQueueSize.value -= 1  # Decrement the queue size
 
             except Exception as e:
-                if self.keepGoing.value or self.kinectRGBQueueSize.value > 0:
+                if self.keepGoing.value or self.RGBQueueSize.value > 0:
                     continue
                 else:
                     break
+
         textFile.close()
-        self.logger.log("Finished RGB writing. Grabbed {} frames in the queue".format(cnt))
+        self.logger.log("Finished RGB writing. Grabbed {} frames in the queue".format(self.writingCounterRGB))
 
     def writeDepth(self):
-        cnt = 0
         textFile = open(os.path.join(self.savePathDepth, "timestamps.txt"), "a")
         while True:
             try:
-                [frame, timestamp] = self.kinectDepthQueue.get_nowait()
-                name = str(cnt).zfill(5)
-                frame = colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
+                [frame, timestamp] = self.DepthQueue.get_nowait()
+                name = str(self.writingCounterDepth).zfill(5)
+                # frame = colorize(frame, (None, 5000), cv2.COLORMAP_BONE)
                 with open(os.path.join(self.savePathDepth, name), 'wb') as f:
                     np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
-                textFile.write("{} \n ".format(timestamp))
-                cnt += 1
-                with self.kinectDepthQueueSize.get_lock():
-                    self.kinectDepthQueueSize.value -= 1
+                textFile.write("{}\n".format(timestamp))
+                self.writingCounterDepth += 1
+                with self.DepthQueueSize.get_lock():
+                    self.DepthQueueSize.value -= 1
 
             except Exception as e:
-                if self.keepGoing.value or self.kinectDepthQueueSize.value > 0:
+                if self.keepGoing.value or self.DepthQueueSize.value > 0:
                     continue
                 else:
                     break
         textFile.close()
-        self.logger.log("Finished Depth writing. Grabbed {} frames in the queue".format(cnt))
+        # self.logger.log(str(self.DepthQueueSize.value))
+        self.logger.log("Finished Depth writing. Grabbed {} frames in the queue".format(self.writingCounterDepth))
 
     def close(self):
         self.logger.log("Closing Kinect...")
         if self.kinect:
             self.kinect.stop()
-
-
-########################################################################################################################
-############################################### FLIR ###################################################################
-########################################################################################################################
-
-class FLIR:
-    def __init__(self, portNum, flirQueue, keepGoing, flirQueueSize, cameraStatus, logger, savePath):
-        self.portNum = portNum
-        self.flirQueue = flirQueue
-        self.keepGoing = keepGoing
-        self.flirQueueSize = flirQueueSize
-        self.cameraStatus = cameraStatus
-        self.logger = logger
-        self.savePath = savePath
-        self.flir = None
-
-    def read(self):
-        flir = cv2.VideoCapture(self.portNum, cv2.CAP_DSHOW)
-        flir.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)
-        flir.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)
-        flir.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'))
-        self.cameraStatus[0] = 1
-        self.flir = flir
-
-        while np.sum(self.cameraStatus) < len(self.cameraStatus):
-            continue
-
-        self.logger.log("FLIR is Recording...")
-        t1 = time.time()
-        timestamp = datetime.now()
-        ret, oldFrame = flir.read()
-        self.flirQueue.put([oldFrame, timestamp])
-        with self.flirQueueSize.get_lock():
-            self.flirQueueSize.value += 1
-        cnt = 1
-        while self.keepGoing.value:
-            timestamp = datetime.now()
-            ret, newFrame = flir.read()
-            if not ret:
-                break
-            if are_identical(oldFrame, newFrame):
-                continue
-            else:
-                self.flirQueue.put([newFrame, timestamp])
-                cnt += 1
-                with self.flirQueueSize.get_lock():
-                    self.flirQueueSize.value += 1
-            oldFrame = newFrame
-        t = time.time() - t1
-        cv2.destroyAllWindows()
-        flir.release()
-        self.logger.log("Finished FLIR acquisition. Put {} frames in the queue".format(cnt))
-        self.logger.log("FLIR acquisition lasted {}s".format(round(t, 3)))
-        self.logger.log("Overall FLIR FPS: {}".format(round(cnt / t, 3)))
-
-    def write(self):
-        cnt = 0
-        textFile = open(os.path.join(self.savePath, "timestamps.txt"), "a")
-        while True:
-            try:
-                [frame, timestamp] = self.flirQueue.get_nowait()
-                name = str(cnt).zfill(5)
-                with open(os.path.join(self.savePath, name), 'wb') as f:
-                    np.save(f, frame, allow_pickle=False)  # Write the image to a .npy file
-                textFile.write("{} \n ".format(timestamp))  # Write timestamp to .txt file
-                cnt += 1
-                with self.flirQueueSize.get_lock():
-                    self.flirQueueSize.value -= 1  # Decrement the queue size
-
-            except Exception as e:
-                if self.keepGoing.value or self.flirQueueSize.value > 0:
-                    continue
-                else:
-                    break
-        textFile.close()
-        self.logger.log("Finished FLIR writing. Grabbed {} frames in the queue".format(cnt))
-
-    def close(self):
-        self.logger.log("Closing FLIR...")
-        self.flir.release()
 
 
 ########################################################################################################################
@@ -315,12 +347,12 @@ class XSens:
         while self.keepGoing.value:  # As long as the acquisition goes on !
             self.mtwManager.writeXsens()
 
-        if not self.mtwManager.awinda.abortFlushing():
+        if not self.mtwManager.device.abortFlushing():
             raise Exception("Failed to abort flushing operation")
         self.logger.log("Stopping XSens recording...\n")
 
         try:
-            self.mtwManager.awinda.stopRecording()
+            self.mtwManager.device.stopRecording()
         except Exception as e:
             print(e)
             raise Exception("Failed to stop recording. Aborting.")
@@ -329,15 +361,12 @@ class XSens:
         self.logger.log("Writing XSens PICKLE data to .txt ... \n")
         mtw.pickle2txt(self.mtwManager)
 
-        # print(self.mtwManager.awinda)
         self.mtwManager.stop()
-        # mtw.stopAll(self.awinda, self.controlDev, self.Ports, self.logger)
-        # print(self.awinda)
 
     def close(self):
+        # if self.mtwManager.device is not None:
         self.logger.log("Closing")
-        if self.mtwManager.awinda is not None:
-            self.mtwManager.stop()
+        self.mtwManager.stop()
 
 
 @nb.jit(nopython=True)

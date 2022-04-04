@@ -4,13 +4,12 @@ import argparse
 from datetime import datetime
 import os
 import json
-sys.path.append("../")
+sys.path.append("../../")
 # Local modules
-from Recalage.videostream import selectStreams, selectStreams2
+from old.videostream import selectStreams2
 from Recalage.cameraUtils import scaleForHconcat, stop, openCalibrationFile, NumpyEncoder, openStereoCalibrationFile
 from Recalage.circledetector import CircleDetector
-from Recalage.circlegridfinder import CircleGridFinder
-from Recalage.calibrate import calibrateCamera
+from old.circlegridfinder import CircleGridFinder
 
 
 def main(saveDirectory):
@@ -210,5 +209,5 @@ if __name__ == '__main__':
     # Get current time and create Results path from time
     now = datetime.now()
     dt_string = now.strftime("%Y-%m-%d_%H-%M")
-    saveDirectory = os.path.join("Results", dt_string + "_" + cameraType)
+    saveDirectory = os.path.join("../../sandbox/results", dt_string + "_" + cameraType)
     main(saveDirectory)

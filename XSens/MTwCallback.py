@@ -85,3 +85,6 @@ class MTwCallback(xda.XsCallback):
                          oldest_packet.timeOfArrival().utcToLocalTime().toXsString().__str__()),
                         file_handle)
         self.m_lock.release()
+
+    # def onInfoResponse(self):
+    #

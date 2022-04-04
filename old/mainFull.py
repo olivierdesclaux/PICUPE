@@ -4,14 +4,14 @@ import multiprocessing
 import shutil
 import sys
 import traceback
-from utils import myLogger
+from cameraUtils import myLogger
 import threading
 
 sys.path.append('../cameras')
 sys.path.append('../XSens')
 sys.path.append('../Recalage')
-from calibrate import calibrateCamera
-from stereocalibration import stereoCalibrate, rectify
+from old.calibrate import calibrateCamera
+from old.stereocalibration import stereoCalibrate, rectify
 from old.readersWriters import *
 
 

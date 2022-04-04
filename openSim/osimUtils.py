@@ -124,7 +124,7 @@ class IMUTracker:
         self.endTime. Saves results in a .mot file.
         Returns
         -------
-        True when finished. 
+        True when finished.
         """
         # Set tool properties
         self.IKTool.set_model_file(self.calibratedModel)

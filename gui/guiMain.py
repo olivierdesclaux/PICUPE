@@ -2,10 +2,6 @@ import sys
 import os
 import tkinter as tk
 from tkinter import ttk
-# from experimentFrame import experimentFrame
-# from calibFrame import calibFrame
-# from IMUFrame import IMUFrame
-# from cameraFrame import cameraFrame
 from gui.experimentFrame import experimentFrame
 from gui.calibFrame import calibFrame
 from gui.IMUFrame import IMUFrame
@@ -48,7 +44,7 @@ class Root(tk.Tk):
         self.checkIMUs()
         self.destroy()
 
-    def saveConfig(self):
+    def saveConfig(self, verbose=True):
         self.config["Experiment Name"] = self.experimentFrame.getExpName()
         self.config["Results Directory"] = self.experimentFrame.saveDirVar.get()
         self.config["Calibration Directory"] = self.calibFrame.directory.get()
@@ -59,10 +55,12 @@ class Root(tk.Tk):
         except:
             calibConfig = None
         self.config["Calibration Parameters"] = calibConfig
-        print(self.config)
+
+        if verbose:
+            print(self.config)
 
     def checkExperimentName(self):
-        self.saveConfig()
+        self.saveConfig(verbose=False)
         # if self.config == {}:
         #     self.saveConfig()
         if self.config["Experiment Name"] == "":
@@ -71,12 +69,12 @@ class Root(tk.Tk):
             raise Exception("Experiment already exists.")
 
     def checkCalibrationDir(self):
-        self.saveConfig()
+        self.saveConfig(verbose=False)
         if self.config["Calibration Directory"] == "":
             raise Exception("No calibration directory specified.")
 
     def checkIMUs(self):
-        self.saveConfig()
+        self.saveConfig(verbose=False)
         if len(self.config["IMUs"]) == 0:
             raise Exception("No IMUs were specified.")
 

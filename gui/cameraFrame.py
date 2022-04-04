@@ -150,7 +150,7 @@ class camera:
         try:
             if self.name == "webcam" and self.webcamPort > -1:
                 self.cam = cv2.VideoCapture(self.webcamPort, cv2.CAP_DSHOW)
-            elif self.name == "kinect rgb" or self.name == "kinect depth":
+            elif self.name == "kinect rgb" or self.name == "kinect depth" or self.name == "kinect":
                 self.cam = k4a.PyK4A(k4a.Config(
                     color_resolution=k4a.ColorResolution.RES_720P,
                     depth_mode=k4a.DepthMode.NFOV_UNBINNED,
